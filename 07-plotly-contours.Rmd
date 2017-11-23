@@ -1,0 +1,68 @@
+---
+title: "07-plotly-contours"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(plotly)
+```
+
+
+#### 3D Charts
+
+Plotly accept non-dataframe as input using z argument
+For instance M is a matrix containing the basic prediction of AxaSr built on the portfolio_example datasets, applied on a Group_car (x-axis) X Bonus(y-axis) grid. Prediction is shown on z-axis
+
+As ~ option refers to data$.., it won't work with matrix : hover label should be created in //
+
+```{r }
+
+  load("./datasets/Prediction.Matrix.Rdata", verbose = T)
+
+  ## color for contours
+  red <- col2rgb("#bc2716")
+  yellow <- col2rgb("#f1e40a")
+  green <-  col2rgb("#189e26")
+
+  ## color bins
+  col <- t(array(c(0, 'rgb(24,158,38)',
+                   0.5, 'rgb(241,228,10)', 
+                   1, 'rgb(188,39,22)'),
+                 dim=c(2,3)))
+
+  ## plot contour
+  plot_ly(x=colnames(M), y = rownames(M), 
+          z = ~M, type = "contour", 
+          autocontour = F,
+          ncontours = floor((max(M) - min(M))/0.2)+1,
+          contours = list(showlabels = TRUE,
+                          labelfont = list(color = "grey60"),
+                          coloring = "fill",
+                          size = 0.2),
+          colorscale = col,
+          text = ~M.label,
+          hoverinfo="text") %>%
+    layout(xaxis = list(title = "Group_Car"),
+           yaxis = list(title = "Bonus"))
+
+
+  ## plot surface
+  
+  plot_ly(x=colnames(M), y = rownames(M), 
+          z = ~M, type = "surface", 
+          colorscale = col,
+          contours = list(x = list(show = T),
+                          y = list(show = T)),
+          text = ~M.label,
+          hoverinfo="text") %>%
+    layout(xaxis = list(title = "Group_Car"),
+           yaxis = list(title = "Bonus"))
+  
+  
+```

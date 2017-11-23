@@ -1,0 +1,78 @@
+---
+title: "11-timeseries-calendar"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r, message = FALSE}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(googleVis)
+library(lubridate)
+library(data.table)
+library(scales)
+```
+
+
+#### Times series : Calendar
+
+data preparation
+
+```{r}
+  load(file = "./datasets/Call911.Rdata", verbose = T)
+  str(Call911.short)
+  
+  Call911.agg <- Call911.short %>% group_by(date) %>% summarise(nbcall = n()) %>% 
+    mutate(year = year(date), day = weekdays(date), daynum = as.POSIXlt(date)$wday, month = months(date), 
+    monthnum = month(date), week = floor(day(date)/7)+1) %>% as.data.table()
+  
+  # order levels
+  d <- Call911.agg %>% select(daynum, day)  %>% unique() %>% arrange(daynum) %>% select(day)
+  Call911.agg$day <- factor(Call911.agg$day, levels = as.character(d$day))
+  
+  m <- Call911.agg %>% select(monthnum, month) %>% arrange(monthnum) %>% select(month) %>% unique()
+  Call911.agg$month <- factor(Call911.agg$month, levels = as.character(m$month))
+
+```
+
+
+Plot preparation
+
+```{r}
+
+  ## plots
+  g <- ggplot(Call911.agg[year>2011], aes(x=week, y=factor(day), fill = nbcall, text = date)) + 
+  geom_tile(colour = "white") + 
+  facet_grid(year ~ factor(month)) + 
+  scale_fill_gradientn(colours = c("green", "yellow","red"),
+                       values  = rescale(c(min(Call911.agg$nbcall), 
+                                   median(Call911.agg$nbcall), 
+                                   max(Call911.agg$nbcall) ))) +
+  scale_y_discrete(name="", limits = rev(levels(Call911.agg$day))) +
+  labs(x="Week of Month",
+       y="",
+       title = "Nb of Call 911", 
+       subtitle="(all types)", 
+       fill="Calls")
+  g
+  
+  
+  ## using ggplotly
+  ggplotly(g, tooltip = c("text", "nbcall"))
+  
+```
+
+
+Can be done with Google Viz
+
+```{r}
+
+  cal <- gvisCalendar(Call911.agg[year > 2011], 
+                    datevar="date", 
+                    numvar="nbcall", 
+                    options = list(height = 1000, width = 1000))
+  plot(cal)
+
+```

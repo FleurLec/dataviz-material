@@ -1,0 +1,60 @@
+---
+title: "06-Mosaic-plot"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message = FALSE}
+library(openxlsx)
+library(plotly)
+```
+
+#### Mosaic plot : plotly
+
+Use case : Getting an overview of Emblem models
+
+1. Get the data
+```{r}
+
+  
+  (coef.xls <- getNamedRegions("./datasets/Emblem_model_glm.xlsx"))
+  (zone <- attr(coef.xls, "position")[which(coef.xls=="EMBLEMFac52Fac9")])
+  
+  # little issue : with Emblem models, we don't get rownames or colnames when calling a namedRegion
+  # need to get them otherwise
+  
+  II <- gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\1", zone)
+  IJ <- gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\3", zone) 
+  ji <- as.integer(gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\2", zone))
+  jj <- as.integer(gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\4", zone))  
+  ii <- which(LETTERS[(1:26)]==II)
+  ij <-  which(LETTERS[(1:26)]==IJ)
+  
+  
+  rowname <- read.xlsx("./datasets/Emblem_model_glm.xlsx", rows = (ji:jj), cols = ii-1, colNames = FALSE )
+  colname <- read.xlsx("./datasets/Emblem_model_glm.xlsx", rows = ji-1, cols = (ii:ij) , colNames = FALSE)
+  coef <- read.xlsx("./datasets/Emblem_model_glm.xlsx", namedRegion = "EMBLEMFac52Fac9", colNames = FALSE)
+  
+  names(coef) <- unlist(colname)
+  rownames(coef) <- unlist(rowname)
+  coef
+```
+
+
+2. plot the results !
+```{r}
+
+plot_ly(x = paste("Segment",colnames(coef)), 
+        y = rownames(coef),
+        z = as.matrix(coef), 
+        type = "heatmap",
+        colors = colorRamp(c("green3", "yellow", "brown2"))) %>%
+layout(title = "Motor - Pure Premium coefficient - <b>Body X segment</b> ")
+
+```

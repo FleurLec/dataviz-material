@@ -1,0 +1,207 @@
+---
+title: "Data Visualization with R - Exercice 1"
+author: "AGPC - Flec"
+date: "Novembre 2017"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(scales)
+library(ggpubr)
+```
+
+
+```{r, echo=FALSE}
+
+## data
+  reportDF <- read.csv2(file = "./datasets/report2017.csv")
+  reportDF$date <- as.Date(reportDF$date)
+  reportDF$portfolio <- as.numeric(reportDF$portfolio)
+
+
+  DFagg <- as.data.table(
+          reportDF %>%
+           group_by(LOB, network, date) %>%
+           summarize(NB = sum(newBusiness),
+                     canc = sum(cancellation),
+                     portfolio = sum(portfolio)) %>%
+           mutate(NB.rate = NB/portfolio,
+                  canc.rate = canc/portfolio,
+                  netInflow = as.numeric(NB - canc)) %>%
+           select(-c(NB, canc))
+  )
+ 
+```
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 1  
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+Using ggplot, let's plot for **Agent** network
+- per LOB (Motor = solid, Household = dashed)
+- per date in x-axis
+3 KPIs : 
+- New Business Rate : green line
+- Cancellation Rate : red line
+- NetInflow : bar plot
+
+**Caution** : remember that ggplot does not allow to plot chart with different y-axis ni the same area !
+
+
+### Solution : 
+
+1/ Cancellation and NB rate using geom_line : 
+
+Generic ggplot theme
+
+```{r}
+## generic theme  :
+  myTheme <-  function(x) { theme(axis.text.x = element_text(angle = -90),                  
+                                  axis.title.x = element_blank(),
+                                  axis.title.y = element_blank(),
+                                  legend.position = "top")
+  }
+```
+
+### SOLUTION 1 : Best in class Solution : using tidy dataframe to smooth ggplot use
+
+
+1/ Cancellation and NB rate using geom_line : 
+
+1. Create Dataset
+```{r}
+  DF.tidy <- DFagg %>% 
+             tidyr::gather(KPI, value, -date, -LOB, -network) %>% 
+             filter(network == "Agent") %>% 
+             as.data.table()
+
+```
+
+
+2. Call ggplot on the tidy dataframe
+```{r}
+
+ a1 <-   ggplot(DF.tidy[KPI %in% c("NB.rate", "canc.rate")]) +                        # data
+         geom_line(aes(x=date, y=value, color = KPI)) +                               # geoms
+         facet_wrap(~LOB, dir = "h") +                                                # facet for LOB
+         scale_y_continuous(labels = scales::percent ) +                              # Scale Y
+         scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+         scale_colour_manual(name="KPI's", 
+                             values=c("NB.rate" = "green", "canc.rate" = "red"),
+                             label = c("NB.rate"="New Business", "canc.rate"="Cancellation")) +
+        myTheme() + ggtitle("Evolution of New Business/Cancellation rate per Line of Business")   # Theme
+ a1
+ 
+```
+ 
+ 
+### SOLUTION 2 : Less adviced : using dataframe as it is
+
+1. same data
+2. ggplot on the untidy dataframe
+```{r}
+ b1 <-  ggplot(DFagg[network == "Agent"]) +                                           # data
+        geom_line(aes(x=date, y=NB.rate, color = "NB")) +                             # geom NB
+        geom_line(aes(x=date, y=canc.rate, color = "Canc")) +                         # geom Cancellation
+        facet_wrap(~LOB, dir="h") +                                                   # facet for LOB
+        scale_y_continuous(labels = scales::percent ) +                               # Scale Y
+        scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +               # Scale X
+        scale_color_manual(name="KPI's", 
+                            values= c(NB = "#00FF00", Canc = "#FF0000"),
+                            label = c(NB = "New Business", Canc = "Cancellation")) +
+        myTheme() + ggtitle("Evolution of New Business/Cancellation rate per Line of Business")   # Theme
+b1    
+
+```
+
+
+### SOLUTION 3 : Solution 2 wrapped in a function 
+
+Note that to map ggplot in a function, some adjustments need to be done : 
+- aes => aes_string if the function variables appear in aes()
+- Quoted string need to be wrapped with shQuote()
+- as.formula for facet options
+
+```{r}
+
+   plot.NB.canc <- function(DF, x.date, y.nb, y.canc, grp) {
+        ggplot(DF) + 
+          geom_line(aes_string(x=x.date, y=y.nb, color = shQuote("NB"))) +
+          geom_line(aes_string(x=x.date, y=y.canc, color = shQuote("Canc"))) +
+          facet_wrap(as.formula(paste0("~",grp)), dir="h") +
+          scale_y_continuous(labels = scales::percent ) +
+          scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +
+          scale_color_manual(name="KPI's", 
+                              values= c(NB = "#00FF00", Canc = "#FF0000"),
+                              label = c(NB = "New Business", Canc = "Cancellation")) +
+          myTheme() + ggtitle("Evolution of New Business/Cancellation rate per Line of Business")   
+      }    
+   c1 <- plot.NB.canc(DFagg[network == "Agent"], "date", "NB.rate", "canc.rate", "LOB")
+   c1
+```
+
+
+2/ Adding NetInflow bar chart and combine all.
+
+=> Here follows the global solution (I choose the tidy method embedded in a function)
+
+
+```{r}
+## generic theme  :
+  myTheme <-  function(x) { theme(axis.text.x = element_text(angle = 90),                  
+                                  axis.title.x = element_blank(),
+                                  axis.title.y = element_blank(),
+                                  legend.position = "right")
+  }
+
+## tidy dataframe
+  DF.tidy <- DFagg %>% tidyr::gather(KPI, value, -date, -LOB, -network) %>% filter(network == "Agent") %>% as.data.table()
+
+
+## function 1 : line 
+ g1.f <- function(df, grp)  {ggplot(df) +                                                           # data
+                       geom_line(aes(x=date, y=value, color = KPI)) +                               # geoms
+                       facet_wrap(as.formula(paste0("~",grp)), dir="h") +                           # facet for LOB
+                       scale_y_continuous(labels = scales::percent ) +                              # Scale Y
+                       scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+                       scale_colour_manual(name="KPI",                                              # Scale Color
+                                           values=c("NB.rate" = "green", "canc.rate" = "red"),
+                                           label = c("NB.rate"="New Business", "canc.rate"="Cancellation")) +
+                      myTheme()                                                                     # Theme
+ }
+ ## function 2 : bar  
+ g2.f <- function(df, grp)  {ggplot(df) +                                                           # data
+                       geom_bar(aes(x=date, y=value, fill = KPI),                                   # geoms
+                                stat = "identity", position = "dodge") +                            # 
+                       facet_wrap(as.formula(paste0("~",grp)), dir="h") +                           # facet for LOB
+                       scale_y_continuous(labels = scales::comma ) +                                # Scale Y
+                       scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+                       scale_fill_manual(name = "KPI",
+                                         values=c("netInflow" = "khaki"),                           # Scale Fill
+                                         label = c("netInflow"="Net Inflow")) +
+                      myTheme()                                                                     # Theme
+ }
+ 
+ 
+ g1 <- g1.f(DF.tidy[KPI %in% c("NB.rate", "canc.rate")], "LOB")
+ g2 <- g2.f(DF.tidy[KPI == "netInflow"], "LOB") 
+
+ggpubr::ggarrange(g1, g2, align = "v", nrow = 2)
+
+
+```
+

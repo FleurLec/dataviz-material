@@ -1,0 +1,32 @@
+---
+title: "08-TreeMap"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(ggplot2)
+library(treemapify)
+```
+
+#### TreeMap
+
+```{r}
+## load data
+  proglangs <- read.csv(file = "./datasets/prog_languages.csv")
+
+## plot
+
+  ggplot(proglangs, aes(area = value, fill = parent, label = id, subgroup = parent)) +
+    geom_treemap() +
+    geom_treemap_subgroup_border() +
+    geom_treemap_subgroup_text(place = "centre", grow = T, alpha = 0.5, colour =
+                               "black", fontface = "italic", min.size = 0) +
+    geom_treemap_text(colour = "white", place = "topleft", reflow = T)
+
+```

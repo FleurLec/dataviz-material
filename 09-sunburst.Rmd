@@ -1,0 +1,41 @@
+---
+title: "09-sunburst"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(sunburstR)
+library(dplyr)
+library(scales)
+library(DT)
+
+```
+
+
+#### Sunburst
+
+Let's load a dataframe built from the Seattle Building Permit datasets
+```{r}
+
+## load the data
+  load(file = "./datasets/Building_sequence.RData", verbose = T)
+  
+## arrange the data
+  sequence <- sequence %>% arrange(desc(nb)) %>% mutate(perc = percent(nb/sum(nb)))
+  
+## head of data
+  datatable(sequence)
+```
+
+
+Then plot the result : 
+```{r}
+  sunburst(sequence)
+
+```

@@ -1,0 +1,87 @@
+---
+title: "Data Visualization with R - Exercice 4"
+author: "AGPC - Flec"
+date: "Novembre 2017"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(rgdal)
+library(rgeos)
+library(ggmap)
+library(dplyr)
+library(broom)
+library(ggplot2)
+```
+
+```{r, echo=FALSE}
+
+  France <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="FRA_dept")
+  France@data$id <- as.character(rownames(France@data))
+  
+## broom::tidy helps to create a dataframe using all polygons informations. 
+## It lost @data, which need to be re-merged
+
+  poly.data <- broom::tidy(France)
+  
+  poly <- left_join(poly.data, France@data, by = "id")
+
+  ## centroid coordinates of each regions
+  centr <- gCentroid(France)@coords
+
+ ## get map (require internet access)  
+  frMap <- get_map(location = centr, zoom = 6)
+  # or : 
+  load(file="./datasets/maps/frMapbg.map")
+
+```
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 4 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+Let's add information to our data-slot and plot it with a discrete scale.
+
+1. Create a fake dataframe of 96 rows (= nb of polygons) containing 
+- polygons id 
+- a variable named "inhts" taking randomly values in "0-10k", "10-50k", "50-100k", "100k +"
+(tips : you can use ```sample```)
+
+2. Plot it on France map
+
+```{r}
+## random df
+ inht.df <- data.frame(id = unique(poly$id), 
+                      inhts = sample(c("0-10k", "10-50k", "50-100k", "100k +"), 
+                                     size = length(unique(poly$id)), replace = T))
+
+## merge
+  poly2 <- left_join(poly, inht.df, by = "id")
+  
+  # in addition, I add it to the data-slot of our map
+  France@data <- left_join(France@data, inht.df, by = "id")
+
+## plot
+  
+ # Choose your palette
+  display.brewer.all()
+  
+ # plot map
+  ggmap(frMap) +
+  geom_polygon(data = poly2, 
+               aes(x=long, y=lat, group = group, fill = inhts), color = "black", size=.2, alpha = .5) +    
+  coord_map() +
+  scale_fill_brewer(palette = "YlOrRd")
+
+
+```

@@ -1,0 +1,64 @@
+---
+title: "Data Visualization with R - Exercice 5"
+author: "AGPC - Flec"
+date: "Novembre 2017"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(rgdal)
+library(rgeos)
+library(leaflet)
+```
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 5 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+
+Load Seattle shapefile (layer "Neighborhoods" in ./datasets/maps/) and, using leaflet, show district names contained in variable S_HOOD
+
+(Tip : You can use  ```gCentroid``` function to set leaflet mapview)
+
+```{r}
+
+  ## load data
+  Seattle <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="Neighborhoods")
+  plot(Seattle)
+  
+  ## get centroide
+  centr.STL <- gCentroid(Seattle)@coords
+
+  ## plot map using leaflet
+    ##  addTiles() for classic tiles, addProviderTiles() for .. providers tiles !
+  
+  leaflet(options = leafletOptions(minZoom = 5, maxZoom = 14)) %>% 
+        #addTiles() %>% 
+        addProviderTiles("Esri.WorldImagery") %>%
+        setView(centr.STL[1], centr.STL[2], zoom = 11) %>% 
+        addPolygons(data=Seattle, weight = 1,  color="firebrick",
+                    opacity=1, fillOpacity = 0.1, 
+                    highlight = highlightOptions(
+                         weight = 1,
+                         color = "grey70",
+                         dashArray = "",
+                         fillOpacity = 0.7,
+                         bringToFront = TRUE),
+                    label = ~as.character(
+                            paste(L_HOOD, "-", S_HOOD))
+                    )  
+                   
+```
+
+

@@ -1,0 +1,51 @@
+---
+title: "03-understanding-polygons-maps"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(rgdal)
+library(ggplot2)
+library(broom)
+```
+
+
+###  Understanding polygons
+
+
+Each geographic boundary is described by a set of coordinates
+
+```{r}
+  France <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="FRA_dept")
+  slotNames(France)
+  proj4string(France)
+  
+  length(France@polygons) ## number of polygons
+  str(France@data)        ## contents of @data slot
+  plot(France)            ## plot it just to see
+  
+```
+
+
+Let's plot the result
+  
+```{r}
+  Poly <- broom::tidy(France@polygons[[30]])
+
+  ## plotting our coords
+  ggplot(Poly) + geom_polygon(aes(x=long, y=lat, group = group), fill = "steelblue", color = "black") 
+  
+  ## plotting our coords with a coordinate reference system !
+  ggplot(Poly) + geom_polygon(aes(x=long, y=lat, group = group), fill = "steelblue", color = "black") +
+    coord_map()  
+  
+  ## group help plotting polygons separately to avoid useless segment
+  ggplot(Poly) + geom_polygon(aes(x=long, y=lat), fill = "steelblue", color = "black") + coord_map()  
+
+```

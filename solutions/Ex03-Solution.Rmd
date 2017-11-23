@@ -1,0 +1,195 @@
+---
+title: "Data Visualization with R - Exercice 3"
+author: "AGPC - Flec"
+date: "Novembre 2017"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(scales)
+library(plotly)
+```
+
+
+```{r, echo=FALSE}
+
+## data
+  reportDF <- read.csv2(file = "./datasets/report2017.csv")
+  reportDF$date <- as.Date(reportDF$date)
+  reportDF$portfolio <- as.numeric(reportDF$portfolio)
+
+
+  DFagg <- as.data.table(
+          reportDF %>%
+           group_by(LOB, network, date) %>%
+           summarize(NB = sum(newBusiness),
+                     canc = sum(cancellation),
+                     portfolio = sum(portfolio)) %>%
+           mutate(NB.rate = NB/portfolio,
+                  canc.rate = canc/portfolio,
+                  netInflow = as.numeric(NB - canc)) %>%
+           select(-c(NB, canc))
+  )
+ 
+```
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 3 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+Try to reproduce at least one of New Business, Cancellation and Net Inflow charts with plot_ly
+
+Nota : with plotly, you can overlay all sort of chart, even on several y axis
+
+```{r}
+
+plot1 <- plot_ly(DFagg[network == "Agent"]) %>%
+            add_trace( x = ~date, y = ~-netInflow, 
+                       type = 'bar', 
+                       yaxis = "y2",
+                       opacity = .4, 
+                       color = ~LOB, 
+                       colors = colorRamp(c("steelblue", "grey")),
+                       hoverinfo = 'text', 
+                       text = ~paste('Net Inflow : ', comma(netInflow),'<br> LOB: ', LOB)) %>% 
+            add_trace( x = ~date, y = ~NB.rate*100, 
+                       name = '% New Business', 
+                       type = 'scatter',  
+                       mode = 'lines', 
+                       linetype = ~LOB, 
+                       line = list(color = "green"), 
+                       hoverinfo = 'text', 
+                       text = ~paste('% New Business : ', round(NB.rate*100, 1), "% ",'<br> LOB: ', LOB))  %>% 
+            add_trace( x = ~date, y = ~canc.rate*100, 
+                       name = '% Cancellation',  
+                       type = 'scatter', 
+                       mode = 'lines+markers', 
+                       linetype = ~LOB,
+                       line = list(color = "red"),
+                       hoverinfo = 'text', 
+                       text = ~paste('% Cancellation : ', round(canc.rate*100, 1), "% ", '<br> LOB: ', LOB)) %>% 
+            layout( title = "Evolution of New Business and Cancellation rates per Line of Business",
+                       barmode = 'dodge',
+                       yaxis = list(ticksuffix = '%', 
+                                    title = "(in % of portfolio N)",
+                                    tickfont = list(size = 10)),
+                       yaxis2 = list(overlaying = "y",
+                                    side = "right",
+                                    tickfont = list(size = 10),
+                                    showgrid = FALSE),
+                       xaxis = list(tickangle = -45, 
+                                    title = "",
+                                    tickfont = list(size = 10)),
+                       margin = list(b=70),
+                       legend = list( x = 1.05,                        # avoid overlap of legend and y-axis
+                                      y = 0.5, yanchor = "center") )   # valign
+
+plot1 
+```
+
+
+Technically feasible but not very lisible : it is adviced to create several plots.
+
+
+```{r}
+# choose your colors per LOB for instance
+  cols <- data.table(v = levels(DFagg$LOB), colors = c("steelblue", "#dee5e4"))
+  
+  plotly.nbcc <- function(df, ntw, lob, legend) {
+    
+        # NB and Cancellation
+        p.nbcc <- plot_ly(df[network == ntw & LOB == lob]) %>%
+            add_lines(x = ~date, y = ~canc.rate*100, 
+                      name = '% Cancellation',  
+                      line = list(color = "red", dash = "dot"),
+                      showlegend = legend,
+                      hoverinfo = 'text', 
+                      text = ~paste('% Cancellation : ', round(canc.rate*100, 1), "% ", '<br> (', ntw, '-', lob, ')')) %>%
+            add_lines(x = ~date, y = ~NB.rate*100, 
+                      name = '% NewBusiness',  
+                      line = list(color = "green"),
+                      showlegend = legend,
+                      hoverinfo = 'text', 
+                      text = ~paste('% New Business : ', round(NB.rate*100, 1), "% ", '<br> (', ntw, '-', lob, ')')) %>%
+            layout(xaxis = list(title = ""),
+                   yaxis = list(ticksuffix = '%', 
+                                tickfont = list(size = 8)))
+  }
+  
+  plotly.ni <- function(df, ntw, lob, legend) {
+      # Net Inflow
+      p.ni <- plot_ly(df[network == ntw & LOB == lob],
+                x = ~date, y = ~netInflow, 
+                type = 'bar', 
+                name = "Net Inflow",
+                marker = list(color = cols[v==lob, colors] ) ,
+                showlegend = legend,
+                opacity = .6,
+                hoverinfo = 'text', 
+                text = ~paste('Net Inflow : ', comma(netInflow), '<br> (', ntw, '-', lob, ')')) %>%
+          layout(xaxis = list(tickangle = -90,
+                              side = "top",
+                              title = "",
+                              autotick = F, 
+                              dtick = "M2",
+                              tickfont = list(size = 8)),
+                 yaxis = list(tickfont = list(size = 8)))
+
+ }
+  
+  
+  
+```
+
+And see the results 
+
+```{r}
+
+
+ ## paste plots together
+ plotly.KPI <- function(df, ntw, lob, legend) {
+ 
+    subplot(plotly.nbcc(df, ntw, lob, legend), 
+            plotly.ni(df, ntw, lob, legend), 
+            nrows = 2, shareX = TRUE, margin = .08) %>%
+    layout( title = paste("Net Inflow, New Business & Cancellation rates  : <b>", ntw, "-", lob, "</b>"),
+            margin = list(b=70),
+            legend = list( x = 1.05,                        # avoid overlap of legend and y-axis
+                           y = 0.5, yanchor = "center") )   # valign
+  
+ }
+
+ plotly.KPI(DFagg, "Agent", "Motor", T)
+ 
+```
+
+
+Use subplot to gather charts :
+
+```{r}
+
+   subplot(plotly.nbcc(DFagg, "Agent", "Motor", T), 
+           plotly.nbcc(DFagg, "Direct", "Motor", F),
+           plotly.ni(DFagg, "Agent", "Motor", T), 
+           plotly.ni(DFagg, "Direct", "Motor", F), 
+            nrows = 2, shareX = TRUE,shareY = T, margin = .08) %>%
+    layout( title = paste("Net Inflow, New Business & Cancellation rates  : <b> Agent vs Direct - Motor</b>"),
+            legend = list( x = 1.05,                        # avoid overlap of legend and y-axis
+                           y = 0.5, yanchor = "center") )   # valign
+  
+```
+

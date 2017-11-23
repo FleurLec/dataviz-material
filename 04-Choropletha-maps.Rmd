@@ -1,0 +1,177 @@
+---
+title: "04-Choropletha-maps"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message = FALSE}
+library(ggplot2) # install from hadley/ggplot2
+library(dplyr)
+library(RColorBrewer)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(leaflet)
+library(ggmap)  # install.packages("ggmap", type = "source")
+library(broom)
+```
+
+Get Data
+
+```{r}
+ France <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="FRA_dept")
+ 
+```
+
+
+#### with basic ggplot 
+
+Let's use our polygons map to show statistics
+By default, polygons id refer to @data rows. 
+
+```{r}
+## add an idea in France@data to merge with datasets
+  France@data$id <- as.character(rownames(France@data))
+
+
+## broom::tidy helps to create a dataframe using all polygons informations. 
+## It lost @data, which need to be re-merged
+
+  poly.data <- broom::tidy(France)
+  
+  poly <- left_join(poly.data, France@data, by = "id")
+
+  
+## plot a map with an automatic gradient fill
+  ggplot(poly) + geom_polygon(aes(x=long, y=lat, group = group, fill = CR), color = "black", size=.2) + 
+    scale_fill_gradientn(colors = RColorBrewer::brewer.pal(5,"RdYlBu")[5:1]) +
+    coord_map()
+
+#display.brewer.all(5)
+
+```
+
+
+#### adding Google map background ( !!need Web access)
+
+```{r}
+## centroid coordinates of each regions
+  centr <- gCentroid(France)@coords
+  centr.Paris <- gCentroid(France[France@data$DEPT_ID==75,], byid = TRUE)@coords
+
+## get map (require internet access)  
+  frMap <- get_map(location = centr, zoom = 6)
+
+
+## then let’s plot our polygons. As both objects share the same CRS, layers fit exactly
+  g <- ggmap(frMap) +
+    geom_polygon(data = poly, 
+                 aes(x=long, y=lat, group = group, fill = CR), color = "black", size=.2, alpha = .5) +      
+    coord_map() + 
+    scale_fill_gradientn(colors = RColorBrewer::brewer.pal(5,"RdYlBu")[5:1])
+  g  
+
+```
+
+
+
+### example
+
+Let's add information to our data-slot and plot it with a discrete scale.
+
+1. Create a fake dataframe of 96 rows (= nb of polygons) containing 
+- polygons id 
+- a variable named "inhts" taking randomly values in "0-10k", "10-50k", "50-100k", "100k +"
+(tips : you can use ```sample```)
+
+2. Plot it on France map
+
+```{r}
+## random df
+ inht.df <- data.frame(id = unique(poly$id), 
+                      inhts = sample(c("0-10k", "10-50k", "50-100k", "100k +"), 
+                                     size = length(unique(poly$id)), replace = T))
+
+## merge
+  poly2 <- left_join(poly, inht.df, by = "id")
+  
+  # in addition, I add it to the data-slot of our map
+  France@data <- left_join(France@data, inht.df, by = "id")
+
+## plot
+  
+ # Choose your palette
+  display.brewer.all()
+  
+ # plot map
+  ggmap(frMap) +
+  geom_polygon(data = poly2, 
+               aes(x=long, y=lat, group = group, fill = inhts), color = "black", size=.2, alpha = .5) +    
+  coord_map() +
+  scale_fill_brewer(palette = "YlOrRd")
+
+
+```
+
+
+
+#### with leaflet
+
+
+```{r}
+
+# color palette : 5 levels from Red to Green
+
+  bins <- quantile(France@data$CR, c(0, .25, .5, .75, 1))
+  pal <- colorBin("RdYlBu", domain = France@data$CR, bins = bins,
+                           na.color = "grey40", reverse = T)
+
+
+# finally leaflet map
+ l <-  leaflet(options = leafletOptions(minZoom = 5, maxZoom = 8)) %>% 
+        addTiles() %>% 
+        setView(centr[1], centr[2], zoom = 5) %>% 
+        addLegend(pal = pal, values = round(France@data$CR, 1), 
+                  opacity = 0.7, position = "bottomright", title = "Combined Ratio")
+ 
+ 
+ l %>%  addPolygons(data=France, weight = 1, 
+                    fill = ~CR, fillColor = ~pal(CR),
+                    opacity=1, fillOpacity = 0.6, color=grey(0.5),
+                    ## USE POPUP
+                    popup = ~as.character(
+                        paste(DEPT_ID, DEPT, "<br>", "Combined Ratio =", round(CR, 2)))
+                    ) 
+
+ 
+```
+
+
+
+You can easily adjusy hover options : in the following example, Popup is replaced by higlights
+
+```{r}
+ 
+
+ l %>% addPolygons(data=France, weight = 1, 
+                    fill = ~CR, fillColor = ~pal(CR),
+                    opacity=1, fillOpacity = 0.6, color=grey(0.5),
+                    ## HIGHLIGHTS instead of POPUP
+                    highlight = highlightOptions(
+                         weight = 1,
+                         color = "white",
+                         dashArray = "",
+                         fillOpacity = 0.7,
+                         bringToFront = TRUE),
+                    label = ~as.character(
+                      paste(DEPT_ID, DEPT, "Combined Ratio =", round(CR, 2)))
+              )  
+
+
+```

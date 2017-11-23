@@ -1,0 +1,126 @@
+---
+title: "05-GPS-maps"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message = FALSE}
+library(ggplot2) # install from hadley/ggplot2
+library(RColorBrewer)
+library(dplyr)
+library(rgdal)
+library(rgeos)
+library(leaflet)
+library(ggmap)  # install.packages("ggmap", type = "source")
+
+```
+
+```{r}
+  France <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="FRA_dept")
+
+## centroid coordinates of each regions
+  centr <- gCentroid(France)@coords
+  centr.Paris <- gCentroid(France[France@data$DEPT_ID==75,], byid = TRUE)@coords
+
+## get map (require internet access)  
+  frMap <- get_map(location = centr, zoom = 6)
+
+
+```
+
+#### Ploting dots (set of GPS) _______________________________________________________________________
+
+
+```{r}
+
+  compet <- read.csv2(file = "./datasets/competitors.csv", stringsAsFactors = F)
+  compet$competitor <- factor(compet$competitor)
+  compet$lat <- as.numeric(compet$lat)
+  compet$long <- as.numeric(compet$long)
+
+  str(compet)
+  
+```
+
+
+
+#### Using ggplot
+
+If we take exactly the same previous example with polygon centroid instead of polygon itself : 
+=> use geom_point
+
+In addition we can test it with more data points and plot a density : 
+
+```{r}
+
+## points
+  ggmap(frMap) +
+  geom_point(data = France@data, aes(x=long_ctd, y=lat_ctd, color = CR)) +
+  scale_color_gradientn(colors = RColorBrewer::brewer.pal(5,"RdYlBu")[5:1])
+
+
+## density
+  ggmap(frMap) +
+  geom_point(data = compet, aes(x=long, y=lat), position = "jitter", alpha = .5)
+  
+  
+  ggmap(frMap) +
+  stat_density_2d(data = compet, aes(x=long, y=lat, fill = ..level..,  alpha =..level..), 
+                  size = 1, bins = 16, geom = "polygon") +
+  scale_fill_gradient(low = "green", high = "red") 
+
+
+```
+
+
+
+#### Using Leaflet
+
+Plotting GPS coordinates => rapidly feel the need of zoom/dezoom, and globally dynamic feature.
+A great javascript-based library for maps is leaflet : 
+
+
+1. Create icon list
+```{r}
+
+## your own icons
+  competitor.ico <- iconList(
+      AXA = makeIcon(iconUrl = "img/axa.png", iconWidth = 20, iconHeight = 20),
+      Groupama = makeIcon(iconUrl = "img/groupama.png", iconWidth = 20, iconHeight = 20),
+      Allianz = makeIcon(iconUrl = "img/allianz.png", iconWidth = 20, iconHeight = 20)
+)
+
+```
+
+
+2a. Plot GPS on a map (using our own icons :) )
+```{r}
+
+## simple dots
+  leaflet(compet, options = leafletOptions(minZoom = 5, maxZoom = 18)) %>% 
+    addTiles() %>%
+    setView(centr.Paris[1], centr.Paris[2], zoom = 12) %>% 
+    addMarkers(lng = ~long, lat = ~lat, icon = ~competitor.ico[competitor], 
+               popup = ~as.character(paste(activity_label, "<br>", adr.street, "<br>", adr.city)))
+    
+```
+
+
+2b. We can use js libraries like markercluster
+```{r}
+## markercluster
+  leaflet(compet, options = leafletOptions(minZoom = 5, maxZoom = 18)) %>% 
+    addTiles() %>%
+    setView(centr[1], centr[2], zoom = 5) %>% 
+    addMarkers(clusterOptions = markerClusterOptions() )
+```
+
+
+
+

@@ -1,0 +1,108 @@
+---
+title: "10-time-series-lines"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(plotly)
+library(dplyr)
+library(lubridate)
+library(data.table)
+```
+
+
+####  Time series : Range slider and custom buttons (plotly)
+
+Data preparation : 
+
+```{r}
+  load(file = "./datasets/Call911.Rdata", verbose = T)
+  str(Call911.short)
+  
+  # Change datasets format to get 1 column per year with umber of call per date
+  Call911 <- Call911.short %>% 
+              group_by(date) %>% 
+              summarise(nbcall = as.numeric(n())) %>%  
+              mutate(year = year(date), monthday = yday(date), 
+                     monthday.lab = format(date, "%m-%d")) %>% 
+              select(-date) 
+   
+
+## Create several datasets (1 per year)
+  Call <- list()
+  for (i in (min(Call911$year):max(Call911$year)) ) {
+    Call[[i-min(Call911$year)+1]] <- Call911 %>% filter(year == i) %>% as.data.table
+  }
+  
+```
+
+Plotting preparation
+
+```{r}
+
+## Create the content of the updatemenu button
+
+  n = max(Call911$year)-min(Call911$year)+1
+
+  bin <- function(x) {tmp <- rep(FALSE, n )
+                      tmp[x] <- TRUE ; return(as.list(tmp))}
+  
+  l <- list()
+    for (i in (min(Call911$year):max(Call911$year)) ) {
+      j = i-min(Call911$year)+1;
+      l[[j]]  = list(method = "restyle",
+                     args = list("visible", bin(j)),
+                     label = i)
+    }
+  
+  
+  
+## add a refresh all option
+  l[[n+1]] = list(method = "restyle",
+                  args = list("visible", as.list(rep(TRUE, n ))),
+                  label = "All")
+  
+```
+
+
+And plot the results
+
+```{r}
+## Create an empty plotly and add layers in a loop
+
+  p <- plot_ly()
+  
+  for(i in (min(Call911$year):max(Call911$year)) ){
+    j <- i-min(Call911$year)+1
+    p <- p %>% add_trace(data = Call[[j]], 
+                         x = ~monthday, y=~nbcall, name = i, 
+                         type = "scatter", mode = "lines",
+                         hoverinfo = "text", 
+                         text = ~paste("date", paste(year, monthday.lab,sep= "-") ,
+                                       "<br> nb call", round(nbcall) ))
+  }
+
+p
+```
+
+Rangeslider + buttons
+
+```{r, fig.show='animate'}
+ 
+  ## add layout including buttons
+  q <- p %>% layout(updatemenus = list( list(y = 1, x = 1, buttons = l)),
+                    legend      = list(x = 0.1, y = 0.9))
+  
+  
+  ## add rangeslides
+  q <- q %>% rangeslider()
+  q
+  
+```
+

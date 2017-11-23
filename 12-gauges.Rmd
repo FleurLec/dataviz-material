@@ -1,0 +1,44 @@
+---
+title: "12-Gauges"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(dplyr)
+library(googleVis)
+library(tidyr)
+```
+
+####  NEW: Gauge (from GoogleViz, but have a look at what can be embed directly from js using htmlwidgets !)
+
+```{r}
+
+
+## data
+  reportDF <- read.csv2(file = "./datasets/report2017.csv")
+  reportDF$date <- as.Date(reportDF$date)
+  reportDF$portfolio <- as.numeric(reportDF$portfolio)
+ 
+ reportDF %>%  
+  group_by(LOB, network) %>% 
+  summarize(num = sum(expense.av*portfolio),denom = sum(premium.av*portfolio)) %>%
+  mutate(CR = round(num/denom*100, 1)) %>%
+  select(-c(num, denom)) %>%
+  unite(tmp, LOB, network, sep = "-") %>%
+  spread(tmp, CR) %>%
+  gvisGauge(labelvar = "LOB", options=list(min=80, max=120, 
+                         greenFrom=90, greenTo=96, 
+                         yellowFrom=96, yellowTo=100,
+                         redFrom=100, redTo=120, 
+                         width=600, height=500,
+                         titleTextStyle="{fontSize:8}")) %>%
+  plot()
+ 
+
+```

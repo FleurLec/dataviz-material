@@ -1,0 +1,250 @@
+---
+title: "15-animate-maps"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message = FALSE}
+library(ggplot2)
+library(plotly)
+library(gganimate)
+library(tidyr)
+library(dplyr)
+library(rgdal)
+library(lubridate)
+library(data.table)
+library(scales)
+```
+
+
+
+#### Automated plots : 
+
+This paragraph show how to animate plots (to illustrate evolution for instance)
+In a first step, we will plot Calls per type on a Seattle map :
+- using dots
+- using density
+
+then we'll show how to animate these plots over time with the special aesthetic ```frame```
+
+
+Get data
+
+```{r}
+  load(file = "./datasets/Call911.Rdata", verbose = T)
+  Seattle <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="Neighborhoods")
+
+```
+
+
+data prep :  First fortify all coordinates into a dataframe to use with ggplot
+
+```{r}
+  Seattle.points <- fortify(Seattle, region = "OBJECTID")
+  
+  ggplot(Seattle.points, aes(long, lat, group = group)) +
+    geom_path() +
+    coord_map()
+```
+
+
+
+data prep: Then adjust our Call 911 data frame to limit the number of Types and add year
+
+```{r}
+  ## See types and aggregate less represented
+  list_of_types <- Call911.short %>% group_by(Type) %>% 
+    summarise(nb = n()) %>% 
+    arrange(desc(nb)) %>% 
+    mutate(perc = scales::percent(nb/sum(nb))) %>%
+    filter(nb/sum(nb)<.02) %>% 
+    select(Type) %>% 
+    unique() %>% unlist()
+
+
+    ## change types 
+    Call911.short2 <- Call911.short %>% 
+                      mutate(Type = ifelse(Type %in% list_of_types, "Others", Type)) %>%
+                      mutate(year = year(date), 
+                             month = paste(month(date), months(date, abbreviate=T), sep="-")) %>% 
+                      as.data.table()
+
+    
+    ## test
+    Type.perc <- function(Y) {
+          (call.lab <- Call911.short2 %>% filter(year %in% Y) %>% group_by(Type) %>% 
+          summarise(nb = n()) %>% 
+          arrange(desc(nb)) %>% 
+          mutate(perc = nb/sum(nb))
+        )
+    }
+    Type.perc(2017)
+ 
+       
+    ## add factor 
+    Call911.short2$Type <- factor(Call911.short2$Type, levels = unlist(Type.perc((2010:2017))$Type))
+
+```
+
+plot : finally plot the result
+
+```{r}
+
+  Call.g1 <- function(Y) {ggplot(Call911.short2[year %in% Y]) +
+              geom_point( aes(x=Longitude, y=Latitude, frame = year, color = Type), size = 0.01) +
+              geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+              ggthemes::theme_map() +
+              theme(plot.background = element_rect(fill = "black"),
+                    legend.background = element_rect(fill = "black"),
+                    legend.position = "right",
+                    legend.key = element_rect(fill = "black"),
+                    title = element_text(color = "white", size =12),
+                    legend.text = element_text(color = "white")) +
+              guides(colour = guide_legend(override.aes = list(size=15*Type.perc(Y)$perc ))) +
+              coord_map() +
+              xlim(Seattle@bbox[1,1], Seattle@bbox[1,2]) +
+              ylim(Seattle@bbox[2,1], Seattle@bbox[2,2]) +
+              scale_color_viridis_d(option = "plasma", labels = paste(Type.perc(Y)$Type, percent(Type.perc(Y)$perc))) 
+  }
+
+# 1 chart
+  Call.g1(2017)
+
+```
+
+
+
+
+And now let's animate : 
+
+```{r, fig.show="animate"}
+
+  gganimate(Call.g1(2010:2017)) 
+
+```
+
+Faceting : 
+
+```{r}
+
+  Call.g1(2017) + facet_wrap(facet = ~Type)
+
+```
+
+```{r, fig.show='animate'}
+
+  gganimate(Call.g1((2010:2017)) + facet_wrap(facet = ~Type)) 
+
+```
+
+
+Using Gradient 
+
+```{r}
+
+# gradient
+  Call.g2 <- ggplot(Call911.short2[year==2017]) +
+                stat_density_2d(aes(x=Longitude, y=Latitude, fill = ..level..,  alpha =..level..), 
+                    size = 1, bins = 16, geom = "polygon") +
+                scale_fill_gradient(low = "green", high = "red") +
+                geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+                ggthemes::theme_map() +
+                theme(plot.background = element_rect(fill = "black"),
+                      legend.background = element_rect(fill = "black"),
+                      legend.position = "right",
+                      legend.key = element_rect(fill = "black"),
+                      legend.text = element_text(color = "white")) +
+                coord_map() +
+                xlim(Seattle@bbox[1,1], Seattle@bbox[1,2]) +
+                ylim(Seattle@bbox[2,1], Seattle@bbox[2,2])
+  
+  Call.g2
+  ggplotly(Call.g2) %>% layout(plot_bgcolor="black")
+ 
+```
+
+
+Let's try to compare density for each year
+
+
+```{r}
+
+# gradient
+  Call.g3 <- ggplot(Call911.short2) +
+                stat_density_2d(aes(x=Longitude, y=Latitude, frame=year, fill = ..level..,  alpha =..level..), 
+                size = 1, bins = 16, geom = "polygon") +
+                scale_fill_gradient(low = "green", high = "red") +
+                geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+                ggthemes::theme_map() +
+                theme(plot.background = element_rect(fill = "black"),
+                      legend.background = element_rect(fill = "black"),
+                      legend.position = "right",
+                      legend.key = element_rect(fill = "black"),
+                      legend.text = element_text(color = "white"),
+                      title = element_text(color = "white"))  +
+                coord_map() +
+                xlim(-122.36, -122.30) +
+                ylim(47.58, 47.68) 
+    
+  ggplotly(Call.g3) %>% layout(plot_bgcolor="black", xaxis = list(range = c(-122.36, -122.30)),
+                               yaxis = list(range(c(47.58, 47.68))))
+  
+ 
+```
+
+
+Animation per month
+
+```{r, fig.show="animate"}
+
+p <- ggplot() +
+      geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+      geom_point(data = Call911.short2[year==2016], aes(x=Longitude, y=Latitude, color = Type, frame = month)) +
+      ggthemes::theme_map() +
+              theme(plot.background = element_rect(fill = "black"),
+                    legend.background = element_rect(fill = "black"),
+                    legend.position = "right",
+                    legend.key = element_rect(fill = "black"),
+                    legend.text = element_text(color = "white", size=12),
+                    title = element_text(color = "white", size =12))  +
+              coord_map() +
+              xlim(-122.5, -122.2) +
+              ylim(47.5, 47.7) 
+
+gganimate(p)
+```
+
+
+Just to check, you can fix scales in ggplot
+
+```{r}
+  for (i in (2010:2017)) {
+  
+    plot <- ggplot(Call911.short2[year==i]) +
+            stat_density_2d(aes(x=Longitude, y=Latitude, fill = ..level..,  alpha =..level..), 
+                            size = 1, bins = 16, geom = "polygon") +
+            scale_fill_gradientn(colours = c("green", "yellow","red"),
+                                 limits=c(0, 5000) ) +
+            geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+            ggthemes::theme_map() +
+            theme(plot.background = element_rect(fill = "black"),
+                  legend.background = element_rect(fill = "black"),
+                  legend.position = "right",
+                  legend.key = element_rect(fill = "black"),
+                  legend.text = element_text(color = "white"),
+                  title = element_text(color = "white")) +
+            coord_map() +
+            xlim(-122.36, -122.30) +
+            ylim(47.58, 47.68)  + 
+            ggtitle(paste("Year", i))
+    print(plot)
+  }
+```
+
+

@@ -1,0 +1,1378 @@
+---
+title: "Data Visualization with R"
+author: "AGPC - Flec"
+date: "Novembre 2017"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, message = FALSE}
+library(data.table)
+library(ggplot2) # install from hadley/ggplot2
+library(plotly)
+library(dplyr)
+library(tidyr)
+library(RColorBrewer)
+library(classInt)
+library(scales)
+library(ggpubr)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(leaflet)
+library(ggmap)  # install.packages("ggmap", type = "source")
+library(openxlsx)
+library(crosstalk)
+library(lubridate)
+library(googleVis)
+library(ggvis)
+library(treemapify)
+library(ggthemes)
+library(gganimate)
+library(sunburstR)
+library(networkD3)
+
+```
+
+# Lecture materials
+
+## #############################################################
+## 1. GGPLOT and the Grammar of Graphics 
+## #############################################################
+
+### R-1 Ggplot and the grammar of graphics _________________________________________________________
+
+GOAL : Load the database and aggregate it per LOB, network, date: 
+
+```{r}
+
+## data
+  reportDF <- read.csv2(file = "./datasets/report2017.csv")
+  reportDF$date <- as.Date(reportDF$date)
+  reportDF$portfolio <- as.numeric(reportDF$portfolio)
+
+
+  DFagg <- as.data.table(
+          reportDF %>%
+           group_by(LOB, network, date) %>%
+           summarize(NB = sum(newBusiness),
+                     canc = sum(cancellation),
+                     portfolio = sum(portfolio)) %>%
+           mutate(NB.rate = NB/portfolio,
+                  canc.rate = canc/portfolio,
+                  netInflow = as.numeric(NB - canc)) %>%
+           select(-c(NB, canc))
+  )
+ 
+```
+
+
+GOAL : Reproduce presentation plot to illustrate different ggplot's layers
+
+  Plot lines : 
+  - color per network, type of line per LOB
+  - adjust x axis to choose date_breaks and format label
+  - adjust y axis to format with comma
+  - adjust colour (used for network) with predefined palette Dark2
+  - provide as many chart as LOB using **v**ertical facetting
+
+```{r}
+ ggplot(DFagg) + 
+   geom_line(aes(x = date, y = netInflow, color = network, linetype = LOB), size = 0.5) +  
+   scale_x_date(date_breaks = "3 months", date_labels = "%b%y") +
+   scale_y_continuous(labels = scales::comma)+
+   scale_colour_brewer(palette = "Dark2") +     
+   facet_wrap(facets = "LOB", dir="v") + 
+   ggtitle("NetInflow par LOB and Network") 
+```
+
+
+
+### R-2 geom_ layer ________________________________________________________________________________
+
+GOAL : Create a toy dataset
+
+```{r}
+## data
+  set.seed(999)
+  DF002 <- data.frame( type = sample(c("blue", "red"), replace =T, size = 200),
+                       x = sample((1:50), replace =T, size = 200))
+  DF002$y <- log(DF002$x) + rnorm(1)
+
+```
+
+
+
+
+GOAL : Show how to deal with geom_ object : 
+  default geom_bar : 
+  - aes : 1 x-axis 
+  - stat : count => count the # of observation per x
+  - position : stack
+  
+```{r}
+## plot - implicit default
+   ggplot(DF002) + 
+   geom_bar(aes(x = x, fill = type), stat = "count", position = "stack")
+
+## same
+   ggplot(DF002) + 
+   geom_bar(aes(x = x, fill = type))
+```
+
+
+
+
+GOAL : Show how to deal with geom_object : changing aesthetic, stat and position
+  user-defined geom_bar : 
+  - aes : 2 axis 
+  - stat : identity => plot the values inside y
+  - position : dodge
+
+```{r}   
+## plot - change stat and position : 
+  ggplot(DF002) + 
+  geom_bar(aes(x = x, y = y, fill = type), stat = "identity", position = "dodge")
+```
+
+
+
+GOAL : Show how to deal with geom : add several geom_layer : ONLY IF HOMOGENEOUS Y-AXIS !
+
+```{r}   
+## plot - change stat and position : 
+  ggplot(DF002) + 
+  geom_bar(aes(x = x, y = y, fill = type), stat = "identity", position = "dodge") + 
+  geom_line(aes(x = x, y = y), color = "black", size = 1, linetype = "dotted")
+
+```
+
+
+
+
+### R-3 stat _______________________________________________________________________________________
+
+GOAL : create a numerical fake dataset for demo
+
+```{r}
+DF003 <- data.frame(color = sample((1:2), size = 20, replace = T),
+                   price = sample((1:2), size = 20, replace = T))
+```
+
+
+
+
+GOAL : understand stat with ggplot, included internar computed variables for each stat : 
+stat_count creates 2 internal variables : ..count.. and ..prop.. : 
+  
+The 2 following charts are exactly the same : only label countaining computed stat changes
+- Nota : aesthetic shared by all layer can be factorized in ggplot(...)
+- note by the way the use of facet_grid(facets = ~[var]) to plot chart side by side
+
+```{r}
+## Using ..count..
+  ggplot(DF003, aes(x = color, fill=factor(price))) +     
+    geom_bar() +    
+    geom_text(aes(label = ..count..),   #use  prop.table(..count..) to get global %
+              stat= "count",
+	            position = position_stack(vjust=0.5)) + 
+  facet_grid(~factor(price))
+
+##using ..prop.. (BEWARE : ..prop.. calculate proportion per group !)
+  ggplot(DF003, aes(x = color, fill=factor(price))) +     
+    geom_bar() +    
+    geom_text(aes(label = scales::percent(..prop..)),   # library(scales) provide nice formats
+              stat= "count",
+	            position = position_stack(vjust=0.5)) + 
+  facet_grid(~factor(price))
+
+```
+
+
+
+
+GOAL : Illustrate the difference between stats 
+       AND 
+       show that ggplot allows several way to obtain the same result
+
+       Check differences !
+       
+```{r}
+## geom_point implicitely uses stat="identity" : plots each single obs
+  ggplot(DF003, aes(color, price)) + geom_point(size = 3)
+  ggplot(DF003, aes(color, price)) + geom_point(alpha=.4, position = position_jitter(0.05,0.05), size = 3) 
+
+                                           
+## We switch to stat="sum"  : plot count of observations
+  ggplot(DF003, aes(color, price)) + geom_point(stat="sum")
+
+##1  
+  ggplot(DF003, aes(color, price)) + geom_point() + stat_sum(aes(color, price))
+
+##2 
+  ggplot(DF003, aes(color, price)) + stat_sum(aes(color, price), geom = "point")
+
+
+```
+
+
+
+
+
+### R-4 scales _____________________________________________________________________________________
+
+GOAL : Show how to deal with your chart scales (color, size, format, ...)
+  - Scale helps to define manually color
+  - scale helps to define manually axis
+  ...
+<i>Nota : plots can be stored as objects</i> 
+
+```{r}
+## example of scales. Here we divide group per species, expecting a diffrent color for each
+  g <- ggplot(iris) +
+         geom_point(aes(Sepal.Width, Sepal.Length, color = Species) )
+  g
+
+## add palette: scale help  
+  g + scale_color_brewer(palette = "Spectral") + ggtitle("palette = Spectral")
+  g + scale_color_manual(values = c("purple", "green", "orange")) + ggtitle("palette = purple, green, orange")
+  
+## change axis 
+  g + scale_x_reverse() + ggtitle("reverse x-axis")
+  g + scale_x_continuous(trans = "reverse") + ggtitle("reverse x-axis - equivalent")  # equivalent : scale_x_reverse is a shortcut 
+
+
+    
+## format y-axis 
+  g + scale_y_continuous(labels = unit_format("cm"))  + ggtitle ("format y axis by adding suffix to ticks labels")
+```
+
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 1  
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+Using ggplot, let's plot for **Agent** network
+- per LOB (Motor = solid, Household = dashed)
+- per date in x-axis
+3 KPIs : 
+- New Business Rate : green line
+- Cancellation Rate : red line
+- NetInflow : bar plot
+
+**Caution** : remember that ggplot does not allow to plot chart with different y-axis ni the same area !
+
+Tips : 
+- You can use tidy dataframe
+- you can try to wrap your ggplot in a function
+  (in that case, some adjustments need to be done : 
+    - aes => aes_string if the function variables appear in aes()
+    - Quoted string need to be wrapped with shQuote()
+    - as.formula for facet options)
+
+
+### Your Solution : 
+
+```{r}
+
+
+
+```
+
+
+
+## #############################################################
+## PLOTLY  
+## #############################################################
+
+### R-5 ggplot, ggplotly and plotly for a bar chart 
+
+GOAL : Show how to embed a ggplot object using plotly wrapper
+
+
+#### With ggplot (classic or wrapped)
+```{r}
+## ggplot
+  g <- ggplot(DFagg, aes(x = date, y=NB.rate, 
+                           # little trick to adjust tooltip in ggplotly :)
+                         text = paste("New Business", round(NB.rate*100, 1), "%") )) + 
+       geom_line(aes(group = interaction(network, LOB), 
+                     color = network,  
+                     linetype = LOB), size=.5) +
+       scale_y_continuous(labels = scales::percent) +
+       theme(axis.title = element_blank())
+  g      
+
+  
+## ggplotly wrapper
+  # simple
+  ggplotly(g)     
+
+  
+  # limit tooltip to  variable "Type" and "New Business"
+  ggplotly(g, tooltip = c("date", "text")) %>% layout(margin = list(l = 75, t = 75))
+  
+
+```
+
+
+GOAL : see other functionnalities available for ggplotly objects
+
+```{r}
+
+## access internal layers of ggplot object
+  plotly_json(g)
+  # str(plotly_build(g))
+
+
+## access data (usefull if ggplot added stats for instance)
+ ggplotly(g) %>% plotly_data()
+
+
+```
+
+
+
+
+
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX 
+### EXERCICE 2 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX 
+
+Go Back to your NewBusiness/Cancellation/NetInflow charts and make them dynamic using ggplotly: 
+
+tips : 
+- you can use subplot
+- to define current and possible adjustment, see both ```plotly_json``` and https://plot.ly/r/reference/#layout )
+
+### Your Solution : 
+
+```{r}
+
+
+
+
+
+```
+
+
+
+
+### R-6 Plotly by itself :
+
+See https://plot.ly/r/#basic-charts 
+
+Example on a basic bar chart : 
+
+```{r}
+ DF002 %>%
+    group_by(x, type) %>%
+    summarise(nb = n()) %>%
+  plot_ly() %>% 
+    add_trace(x = ~x, y = ~nb, color = ~type, type = "bar", 
+            colors = c("red" = "lightcoral", "blue" = "steelblue"),
+            hoverinfo = 'text', 
+            text = ~paste('Type : ', type,'<br> x : ', x, '// y :', nb)) %>%
+    layout(barmode = 'stack')
+
+```
+
+
+Or 
+
+```{r}
+ DF002 %>%
+    group_by(x, type) %>%
+    summarise(nb = n()) %>%
+  plot_ly() %>% 
+    add_bars(x = ~x, y = ~nb, color = ~type,  
+            colors = c("red" = "lightcoral", "blue" = "steelblue"),
+            hoverinfo = 'text', 
+            text = ~paste('Type : ', type,'<br> x : ', x, '// y :', nb)) %>%
+    layout(barmode = 'stack')
+
+```
+
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 3 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+Try to reproduce at least one of New Business, Cancellation and Net Inflow charts with plot_ly
+
+Nota : with plotly, you can overlay all sort of chart, even on several y axis
+
+### Your Solution : 
+
+```{r}
+
+
+
+
+
+```
+
+
+
+
+## #############################################################
+## PLOTLY  
+## #############################################################
+
+### R-7 Understanding polygons
+
+
+Each geographic boundary is described by a set of coordinates
+
+```{r}
+  France <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="FRA_dept")
+  slotNames(France)
+  proj4string(France)
+  
+  length(France@polygons) ## number of polygons
+  str(France@data)        ## contents of @data slot
+  plot(France)            ## plot it just to see
+  
+```
+
+
+Example of slot = polygons
+Beware ! <b>One polygon slot can embed several polygons</b> (non connexity or holes)
+Each Polygon should be pot separately to avoid inelegant segments linking them
+
+```{r}
+## number of polygons slots
+  length(France@polygons)
+
+## List of polygons with subpolygons 
+  sub <- sapply((1:length(France@polygons)), function(i) {length(France@polygons[[i]]@Polygons)  }) 
+  index.sub <- which( sub > 1) ; 
+
+## index and number of sub polygons
+  rbind(index.sub, sub[index.sub])
+
+## what is inside this polygons set
+  France@polygons[[30]]
+
+## use broom:tidy to build a dataframe out of these polygons lists
+  Poly <- broom::tidy(France@polygons[[30]])
+
+```
+
+
+
+Let's plot the result
+  
+```{r}
+
+  ## plotting our coords
+  ggplot(Poly) + geom_polygon(aes(x=long, y=lat, group = group), fill = "steelblue", color = "black") 
+  
+  ## plotting our coords with a coordinate reference system !
+  ggplot(Poly) + geom_polygon(aes(x=long, y=lat, group = group), fill = "steelblue", color = "black") +
+    coord_map()  
+  
+  ## group help plotting polygons separately to avoid useless segment
+  ggplot(Poly) + geom_polygon(aes(x=long, y=lat), fill = "steelblue", color = "black") + coord_map()  
+
+```
+Nota : You see that the 2nd polygons in Polygons slot 76 was an island
+
+
+
+
+### R-8 Choropletha maps
+
+#### with basic ggplot 
+
+Let's use our polygons map to show statistics
+By default, polygons id refer to @data rows. 
+
+```{r}
+## add an idea in France@data to merge with datasets
+  France@data$id <- as.character(rownames(France@data))
+
+
+## broom::tidy helps to create a dataframe using all polygons informations. 
+## It lost @data, which need to be re-merged
+
+  poly.data <- broom::tidy(France)
+  
+  poly <- left_join(poly.data, France@data, by = "id")
+  str(poly)
+  
+  
+## plot a map with an automatic gradient fill
+  ggplot(poly) + geom_polygon(aes(x=long, y=lat, group = group, fill = CR), color = "black", size=.2) + 
+    scale_fill_gradientn(colors = RColorBrewer::brewer.pal(5,"RdYlBu")[5:1]) +
+    coord_map()
+
+#display.brewer.all(5)
+
+```
+
+
+#### adding Google map background ( !!need Web access)
+
+```{r}
+## centroid coordinates of each regions
+  centr <- gCentroid(France)@coords
+  centr.Paris <- gCentroid(France[France@data$DEPT_ID==75,], byid = TRUE)@coords
+
+## get map (require internet access)  
+  frMap <- get_map(location = centr, zoom = 6)
+
+
+## then let’s plot our polygons. As both objects share the same CRS, layers fit exactly
+  g <- ggmap(frMap) +
+    geom_polygon(data = poly, 
+                 aes(x=long, y=lat, group = group, fill = CR), color = "black", size=.2, alpha = .5) +      
+    coord_map() + 
+    scale_fill_gradientn(colors = RColorBrewer::brewer.pal(5,"RdYlBu")[5:1])
+  g  
+
+```
+
+
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 4 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+Let's add information to our data-slot and plot it with a discrete scale.
+
+1. Create a fake dataframe of 96 rows (= nb of polygons) containing 
+- polygons id 
+- a variable named "inhts" taking randomly values in "0-10k", "10-50k", "50-100k", "100k +"
+(tips : you can use ```sample```)
+
+```{r}
+## random df
+ inht.df <- data.frame(id = unique(poly$id), 
+                      inhts = sample(c("0-10k", "10-50k", "50-100k", "100k +"), 
+                                     size = length(unique(poly$id)), replace = T))
+
+```
+
+2. Plot it on France map
+
+tips : you can merge your dataframe with @data slot of the shapefile using dplyr::left_join()
+
+#### Your Solution : 
+
+```{r}
+
+
+
+
+
+```
+
+
+
+
+#### with leaflet
+
+
+```{r}
+
+# color palette : 5 levels from Red to Green
+
+  bins <- quantile(France@data$CR, c(0, .25, .5, .75, 1))
+  pal <- colorBin("RdYlBu", domain = France@data$CR, bins = bins,
+                           na.color = "grey40", reverse = T)
+
+
+# finally leaflet map
+ l <-  leaflet(options = leafletOptions(minZoom = 5, maxZoom = 8)) %>% 
+        addTiles() %>% 
+        setView(centr[1], centr[2], zoom = 5) %>% 
+        addLegend(pal = pal, values = round(France@data$CR, 1), 
+                  opacity = 0.7, position = "bottomright", title = "Combined Ratio")
+ 
+ 
+ l %>%  addPolygons(data=France, weight = 1, 
+                    fill = ~CR, fillColor = ~pal(CR),
+                    opacity=1, fillOpacity = 0.6, color=grey(0.5),
+                    ## USE POPUP
+                    popup = ~as.character(
+                        paste(DEPT_ID, DEPT, "<br>", "Combined Ratio =", round(CR, 2)))
+                    ) 
+
+ 
+```
+
+
+
+You can easily adjusy hover options : in the following example, Popup is replaced by higlights
+
+```{r}
+ 
+
+ l %>% addPolygons(data=France, weight = 1, 
+                    fill = ~CR, fillColor = ~pal(CR),
+                    opacity=1, fillOpacity = 0.6, color=grey(0.5),
+                    ## HIGHLIGHTS instead of POPUP
+                    highlight = highlightOptions(
+                         weight = 1,
+                         color = "white",
+                         dashArray = "",
+                         fillOpacity = 0.7,
+                         bringToFront = TRUE),
+                    label = ~as.character(
+                      paste(DEPT_ID, DEPT, "Combined Ratio =", round(CR, 2)))
+              )  
+
+
+```
+
+
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+### EXERCICE 5 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX  
+
+
+Load Seattle shapefile (layer "Neighborhoods" in ./datasets/maps/) and, using leaflet, show district names contained in variable S_HOOD
+
+(Tip : You can use coordinates returned by ```gCentroid``` function to set leaflet mapview)
+
+
+```{r}
+  ## load data
+  Seattle <- readOGR(dsn=paste0(getwd(), "/datasets/maps"), layer="Neighborhoods")
+  plot(Seattle)
+  
+  ## get centroide
+  centr.STL <- gCentroid(Seattle)@coords
+```
+  
+  
+#### Your Solution :   
+
+```{r}
+
+
+
+
+                   
+```
+
+
+
+
+
+
+#### Ploting dots (set of GPS) _______________________________________________________________________
+
+
+```{r}
+
+  compet <- read.csv2(file = "./datasets/competitors.csv", stringsAsFactors = F)
+  compet$competitor <- factor(compet$competitor)
+  compet$lat <- as.numeric(compet$lat)
+  compet$long <- as.numeric(compet$long)
+
+  str(compet)
+  
+```
+
+
+
+#### Using ggplot
+
+If we take exactly the same previous example with polygon centroid instead of polygon itself : 
+=> use geom_point
+
+In addition we can test it with more data points and plot a density : 
+
+```{r}
+
+## points
+  ggmap(frMap) +
+  geom_point(data = France@data, aes(x=long_ctd, y=lat_ctd, color = CR)) +
+  scale_color_gradientn(colors = RColorBrewer::brewer.pal(5,"RdYlBu")[5:1])
+
+
+## density
+  ggmap(frMap) +
+  geom_point(data = compet, aes(x=long, y=lat), position = "jitter", alpha = .5)
+  
+  
+  ggmap(frMap) +
+  stat_density_2d(data = compet, aes(x=long, y=lat, fill = ..level..,  alpha =..level..), 
+                  size = 1, bins = 16, geom = "polygon") +
+  scale_fill_gradient(low = "green", high = "red") 
+
+
+```
+
+
+
+#### Using Leaflet
+
+Plotting GPS coordinates => rapidly feel the need of zoom/dezoom, and globally dynamic feature.
+A great javascript-based library for maps is leaflet : 
+
+
+1. Create icon list
+```{r}
+
+## your own icons
+  competitor.ico <- iconList(
+      AXA = makeIcon(iconUrl = "img/axa.png", iconWidth = 20, iconHeight = 20),
+      Groupama = makeIcon(iconUrl = "img/groupama.png", iconWidth = 20, iconHeight = 20),
+      Allianz = makeIcon(iconUrl = "img/allianz.png", iconWidth = 20, iconHeight = 20)
+)
+
+```
+
+
+2a. Plot GPS on a map (using our own icons :) )
+```{r}
+
+## simple dots
+  leaflet(compet, options = leafletOptions(minZoom = 5, maxZoom = 18)) %>% 
+    addTiles() %>%
+    setView(centr.Paris[1], centr.Paris[2], zoom = 12) %>% 
+    addMarkers(lng = ~long, lat = ~lat, icon = ~competitor.ico[competitor], 
+               popup = ~as.character(paste(activity_label, "<br>", adr.street, "<br>", adr.city)))
+    
+```
+
+
+2b. We can use js libraries like markercluster
+```{r}
+## markercluster
+  leaflet(compet, options = leafletOptions(minZoom = 5, maxZoom = 18)) %>% 
+    addTiles() %>%
+    setView(centr[1], centr[2], zoom = 5) %>% 
+    addMarkers(clusterOptions = markerClusterOptions() )
+```
+
+
+
+
+
+
+### R-9 Fancy stuffs  
+
+
+Let's play a bit with Viz capabilities
+
+
+
+#### Mosaic plot : plotly
+
+Use case : Getting an overview of Emblem models
+
+1. Get the data
+```{r}
+library(openxlsx)
+  
+  (coef.xls <- getNamedRegions("./datasets/Emblem_model_glm.xlsx"))
+  (zone <- attr(coef.xls, "position")[which(coef.xls=="EMBLEMFac52Fac9")])
+  
+  # little issue : with Emblem models, we don't get rownames or colnames when calling a namedRegion
+  # need to get them otherwise
+  
+  II <- gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\1", zone)
+  IJ <- gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\3", zone) 
+  ji <- as.integer(gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\2", zone))
+  jj <- as.integer(gsub("([[:alpha:]]+)([0-9]+):([[:alpha:]]+)([0-9]+)", "\\4", zone))  
+  ii <- which(LETTERS[(1:26)]==II)
+  ij <-  which(LETTERS[(1:26)]==IJ)
+  
+  
+  rowname <- read.xlsx("./datasets/Emblem_model_glm.xlsx", rows = (ji:jj), cols = ii-1, colNames = FALSE )
+  colname <- read.xlsx("./datasets/Emblem_model_glm.xlsx", rows = ji-1, cols = (ii:ij) , colNames = FALSE)
+  coef <- read.xlsx("./datasets/Emblem_model_glm.xlsx", namedRegion = "EMBLEMFac52Fac9", colNames = FALSE)
+  
+  names(coef) <- unlist(colname)
+  rownames(coef) <- unlist(rowname)
+  coef
+```
+
+
+2. plot the results !
+```{r}
+
+plot_ly(x = paste("Segment",colnames(coef)), 
+        y = rownames(coef),
+        z = as.matrix(coef), 
+        type = "heatmap",
+        colors = colorRamp(c("green3", "yellow", "brown2"))) %>%
+layout(title = "Motor - Pure Premium coefficient - <b>Body X segment</b> ")
+
+```
+
+
+
+#### 3D Charts
+
+Plotly accept non-dataframe as input using z argument
+For instance M is a matrix containing the basic prediction of AxaSr built on the portfolio_example datasets, applied on a Group_car (x-axis) X Bonus(y-axis) grid. Prediction is shown on z-axis
+
+As ~ option refers to data$.., it won't work with matrix : hover label should be created in //
+
+```{r , eval=F}
+
+  load("./datasets/Prediction.Matrix.Rdata", verbose = T)
+
+  ## color for contours
+  red <- col2rgb("#bc2716")
+  yellow <- col2rgb("#f1e40a")
+  green <-  col2rgb("#189e26")
+
+  ## color bins
+  col <- t(array(c(0, 'rgb(24,158,38)',
+                   0.5, 'rgb(241,228,10)', 
+                   1, 'rgb(188,39,22)'),
+                 dim=c(2,3)))
+
+  ## plot contour
+  plot_ly(x=colnames(M), y = rownames(M), 
+          z = ~M, type = "contour", 
+          autocontour = F,
+          ncontours = floor((max(M) - min(M))/0.2)+1,
+          contours = list(showlabels = TRUE,
+                          labelfont = list(color = "grey60"),
+                          coloring = "fill",
+                          size = 0.2),
+          colorscale = col,
+          text = ~M.label,
+          hoverinfo="text") %>%
+    layout(xaxis = list(title = "Group_Car"),
+           yaxis = list(title = "Bonus"))
+
+
+  ## plot surface
+  
+  plot_ly(x=colnames(M), y = rownames(M), 
+          z = ~M, type = "surface", 
+          colorscale = col,
+          contours = list(x = list(show = T),
+                          y = list(show = T)),
+          text = ~M.label,
+          hoverinfo="text") %>%
+    layout(xaxis = list(title = "Group_Car"),
+           yaxis = list(title = "Bonus"))
+  
+  
+```
+
+
+
+#### TreeMap
+
+```{r}
+## load data
+  proglangs <- read.csv(file = "./datasets/prog_languages.csv")
+
+## plot
+
+  ggplot(proglangs, aes(area = value, fill = parent, label = id, subgroup = parent)) +
+    geom_treemap() +
+    geom_treemap_subgroup_border() +
+    geom_treemap_subgroup_text(place = "centre", grow = T, alpha = 0.5, colour =
+                               "black", fontface = "italic", min.size = 0) +
+    geom_treemap_text(colour = "white", place = "topleft", reflow = T)
+
+```
+
+
+
+#### Sunburst
+
+Let's load a dataframe built from the Seattle Building Permit datasets
+```{r}
+
+## load the data
+  load(file = "./datasets/Building_sequence.RData", verbose = T)
+  
+## arrange the data
+  sequence %>% arrange(desc(nb)) %>% mutate(perc = percent(nb/sum(nb)))
+```
+
+
+Then plot the result : 
+```{r}
+  sunburst(sequence)
+
+```
+
+
+
+####  Time series : Range slider and custom buttons (plotly)
+
+Data preparation : 
+
+```{r}
+  load(file = "./datasets/Call911.Rdata", verbose = T)
+  str(Call911.short)
+  
+  # Change datasets format to get 1 column per year with umber of call per date
+  Call911 <- Call911.short %>% 
+              group_by(date) %>% 
+              summarise(nbcall = as.numeric(n())) %>%  
+              mutate(year = year(date), monthday = yday(date), 
+                     monthday.lab = format(date, "%m-%d")) %>% 
+              select(-date) 
+   
+
+## Create several datasets (1 per year)
+  Call <- list()
+  for (i in (min(Call911$year):max(Call911$year)) ) {
+    Call[[i-min(Call911$year)+1]] <- Call911 %>% filter(year == i) %>% as.data.table
+  }
+  
+```
+
+Plotting preparation
+
+```{r}
+
+## Create the content of the updatemenu button
+
+  n = max(Call911$year)-min(Call911$year)+1
+
+  bin <- function(x) {tmp <- rep(FALSE, n )
+                      tmp[x] <- TRUE ; return(as.list(tmp))}
+  
+  l <- list()
+    for (i in (min(Call911$year):max(Call911$year)) ) {
+      j = i-min(Call911$year)+1;
+      l[[j]]  = list(method = "restyle",
+                     args = list("visible", bin(j)),
+                     label = i)
+    }
+  
+  
+  
+## add a refresh all option
+  l[[n+1]] = list(method = "restyle",
+                  args = list("visible", as.list(rep(TRUE, n ))),
+                  label = "All")
+  
+```
+
+
+And plot the results
+
+```{r}
+## Create an empty plotly and add layers in a loop
+
+  p <- plot_ly()
+  
+  for(i in (min(Call911$year):max(Call911$year)) ){
+    j <- i-min(Call911$year)+1
+    p <- p %>% add_trace(data = Call[[j]], 
+                         x = ~monthday, y=~nbcall, name = i, 
+                         type = "scatter", mode = "lines",
+                         hoverinfo = "text", 
+                         text = ~paste("date", paste(year, monthday.lab,sep= "-") ,
+                                       "<br> nb call", round(nbcall) ))
+  }
+
+p
+```
+
+
+```{r, fig.show='animate'}
+ 
+  ## add layout including buttons
+  q <- p %>% layout(updatemenus = list( list(y = 1, x = 1, buttons = l)),
+                    legend      = list(x = 0.1, y = 0.9))
+  q
+  
+  
+  ## add rangeslides
+  q %>% rangeslider()
+
+  
+```
+
+
+
+
+#### Times series : Calendar
+
+data preparation
+
+```{r}
+
+  Call911.agg <- Call911.short %>% group_by(date) %>% summarise(nbcall = n()) %>% 
+    mutate(year = year(date), day = weekdays(date), daynum = as.POSIXlt(date)$wday, month = months(date), 
+    monthnum = month(date), week = floor(day(date)/7)+1) %>% as.data.table()
+  
+  # order levels
+  d <- Call911.agg %>% select(daynum, day)  %>% unique() %>% arrange(daynum) %>% select(day)
+  Call911.agg$day <- factor(Call911.agg$day, levels = as.character(d$day))
+  
+  m <- Call911.agg %>% select(monthnum, month) %>% arrange(monthnum) %>% select(month) %>% unique()
+  Call911.agg$month <- factor(Call911.agg$month, levels = as.character(m$month))
+
+```
+
+
+Plot preparation
+
+```{r}
+
+  ## plots
+  g <- ggplot(Call911.agg[year>2011], aes(x=week, y=factor(day), fill = nbcall, text = date)) + 
+  geom_tile(colour = "white") + 
+  facet_grid(year ~ factor(month)) + 
+  scale_fill_gradientn(colours = c("green", "yellow","red"),
+                       values  = rescale(c(min(Call911.agg$nbcall), 
+                                   median(Call911.agg$nbcall), 
+                                   max(Call911.agg$nbcall) ))) +
+  scale_y_discrete(name="", limits = rev(levels(Call911.agg$day))) +
+  labs(x="Week of Month",
+       y="",
+       title = "Nb of Call 911", 
+       subtitle="(all types)", 
+       fill="Calls")
+  g
+  
+  
+  ## using ggplotly
+  ggplotly(g, tooltip = c("text", "nbcall"))
+  
+```
+
+
+Can be done with Google Viz
+
+```{r}
+
+  cal <- gvisCalendar(Call911.agg[year > 2011], 
+                    datevar="date", 
+                    numvar="nbcall", 
+                    options = list(height = 1000, width = 1000))
+  plot(cal)
+
+```
+
+
+####  NEW: Gauge (from GoogleViz, but have a look at what can be embed directly from js using htmlwidgets !)
+
+```{r}
+
+ reportDF %>%  
+  group_by(LOB, network) %>% 
+  summarize(num = sum(expense.av*portfolio),denom = sum(premium.av*portfolio)) %>%
+  mutate(CR = round(num/denom*100, 1)) %>%
+  select(-c(num, denom)) %>%
+  unite(tmp, LOB, network, sep = "-") %>%
+  spread(tmp, CR) %>%
+  gvisGauge(labelvar = "LOB", options=list(min=80, max=120, 
+                         greenFrom=90, greenTo=96, 
+                         yellowFrom=96, yellowTo=100,
+                         redFrom=100, redTo=120, 
+                         width=600, height=500,
+                         titleTextStyle="{fontSize:8}")) %>%
+  plot()
+ 
+
+```
+
+
+#### NEW: Sandkey
+
+```{r}
+
+  load(file = "./datasets/Sankey.RData", verbose = T)
+
+  # create list of labels
+  label.list = factor(unique(c(sankey.df$label.source, sankey.df$label.target)))
+
+ plot_ly(sankey.df, type = "sankey", orientation = "h",  
+         ##nodes
+         node = list(label = label.list,
+                     color = rainbow(length(label.list)),
+                     pad = 15,
+                     thickness = 15,
+                     line = list(color = "black",
+                                width = 0.5)),
+                   ## link
+                     link = list(source = ~source,
+                                 target = ~target,
+                                 value =  ~value)) %>% 
+       layout( title = "SanKey Example",
+                             font = list(size = 10),
+                             margin = list(t = 20),
+                             xaxis = list(showgrid = F, zeroline = F),
+                             yaxis = list(showgrid = F, zeroline = F)
+                     )
+
+
+```
+
+
+## NEW: networks
+
+
+```{r}
+
+tmp1 <- sankey.df %>% group_by(label.source, levels) %>% filter(row_number() == 1) %>% select(label.source, levels)
+
+tmp2 <- anti_join(sankey.df, tmp1, by=c("label.target"="label.source")) %>% select(label.target) %>% mutate(levels = as.integer(4)) %>% rename(label.source = label.target) %>% group_by(label.source, levels) %>% filter(row_number() == 1)
+
+nodes <- rbind(tmp1 ,tmp2) %>% as.data.frame()
+nodes$value.node <- rpois(nrow(nodes), 5)
+
+d3 = forceNetwork(Links = sankey.df, Nodes = nodes,
+                  Source = 'source', Target = 'target', 
+                  NodeID = 'label.source',
+                  Nodesize = 'value.node', #sizing nodes by centrality
+                  Group = 'levels', # color nodes by source 
+                  charge = -50, # node repulsion
+                  linkDistance = 2,
+                  zoom = T, 
+                  opacity = 1,
+                  legend=T,
+                  fontSize=12)
+
+show(d3)
+```
+
+
+
+
+
+
+
+#### Automated plots : 
+
+This paragraph show how to animate plots (to illustrate evolution for instance)
+In a first step, we will plot Calls per type on a Seattle map :
+- using dots
+- using density
+
+then we'll show how to animate these plots over time with the special aesthetic ```frame```
+
+
+
+data prep :  First fortify all coordinates into a dataframe to use with ggplot
+
+```{r}
+  Seattle.points <- fortify(Seattle, region = "OBJECTID")
+  
+  ggplot(Seattle.points, aes(long, lat, group = group)) +
+    geom_path() +
+    coord_map()
+```
+
+
+
+data prep: Then adjust our Call 911 data frame to limit the number of Types and add year
+
+```{r}
+  ## See types and aggregate less represented
+  list_of_types <- Call911.short %>% group_by(Type) %>% 
+    summarise(nb = n()) %>% 
+    arrange(desc(nb)) %>% 
+    mutate(perc = scales::percent(nb/sum(nb))) %>%
+    filter(nb/sum(nb)<.02) %>% 
+    select(Type) %>% 
+    unique() %>% unlist()
+
+
+    ## change types 
+    Call911.short2 <- Call911.short %>% 
+                      mutate(Type = ifelse(Type %in% list_of_types, "Others", Type)) %>%
+                      mutate(year = year(date), 
+                             month = paste(month(date), months(date, abbreviate=T), sep="-")) %>% 
+                      as.data.table()
+
+    
+    ## test
+    Type.perc <- function(Y) {
+          (call.lab <- Call911.short2 %>% filter(year %in% Y) %>% group_by(Type) %>% 
+          summarise(nb = n()) %>% 
+          arrange(desc(nb)) %>% 
+          mutate(perc = nb/sum(nb))
+        )
+    }
+    Type.perc(2017)
+ 
+       
+    ## add factor 
+    Call911.short2$Type <- factor(Call911.short2$Type, levels = unlist(Type.perc((2010:2017))$Type))
+
+```
+
+plot : finally plot the result
+
+```{r}
+
+  Call.g1 <- function(Y) {ggplot(Call911.short2[year %in% Y]) +
+              geom_point( aes(x=Longitude, y=Latitude, frame = year, color = Type), size = 0.01) +
+              geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+              ggthemes::theme_map() +
+              theme(plot.background = element_rect(fill = "black"),
+                    legend.background = element_rect(fill = "black"),
+                    legend.position = "right",
+                    legend.key = element_rect(fill = "black"),
+                    title = element_text(color = "white", size =12),
+                    legend.text = element_text(color = "white")) +
+              guides(colour = guide_legend(override.aes = list(size=15*Type.perc(Y)$perc ))) +
+              coord_map() +
+              xlim(Seattle@bbox[1,1], Seattle@bbox[1,2]) +
+              ylim(Seattle@bbox[2,1], Seattle@bbox[2,2]) +
+              scale_color_viridis_d(option = "plasma", labels = paste(Type.perc(Y)$Type, percent(Type.perc(Y)$perc))) 
+  }
+
+# 1 chart
+  Call.g1(2017)
+
+```
+
+
+
+
+And now let's animate : 
+
+```{r, fig.show="animate"}
+
+  gganimate(Call.g1(2010:2017)) 
+
+```
+
+Faceting : 
+
+```{r}
+
+  Call.g1(2017) + facet_wrap(facet = ~Type)
+
+```
+
+```{r, fig.show='animate'}
+
+  gganimate(Call.g1((2010:2017)) + facet_wrap(facet = ~Type)) 
+
+```
+
+
+Using Gradient 
+
+```{r}
+
+# gradient
+  Call.g2 <- ggplot(Call911.short2[year==2017]) +
+                stat_density_2d(aes(x=Longitude, y=Latitude, fill = ..level..,  alpha =..level..), 
+                    size = 1, bins = 16, geom = "polygon") +
+                scale_fill_gradient(low = "green", high = "red") +
+                geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+                ggthemes::theme_map() +
+                theme(plot.background = element_rect(fill = "black"),
+                      legend.background = element_rect(fill = "black"),
+                      legend.position = "right",
+                      legend.key = element_rect(fill = "black"),
+                      legend.text = element_text(color = "white")) +
+                coord_map() +
+                xlim(Seattle@bbox[1,1], Seattle@bbox[1,2]) +
+                ylim(Seattle@bbox[2,1], Seattle@bbox[2,2])
+  
+  Call.g2
+  ggplotly(Call.g2) %>% layout(plot_bgcolor="black")
+ 
+```
+
+
+Let's try to compare density for each year
+
+
+```{r}
+
+# gradient
+  Call.g3 <- ggplot(Call911.short2) +
+                stat_density_2d(aes(x=Longitude, y=Latitude, frame=year, fill = ..level..,  alpha =..level..), 
+                size = 1, bins = 16, geom = "polygon") +
+                scale_fill_gradient(low = "green", high = "red") +
+                geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+                ggthemes::theme_map() +
+                theme(plot.background = element_rect(fill = "black"),
+                      legend.background = element_rect(fill = "black"),
+                      legend.position = "right",
+                      legend.key = element_rect(fill = "black"),
+                      legend.text = element_text(color = "white"),
+                      title = element_text(color = "white"))  +
+                coord_map() +
+                xlim(-122.36, -122.30) +
+                ylim(47.58, 47.68) 
+    
+  ggplotly(Call.g3) %>% layout(plot_bgcolor="black", xaxis = list(range = c(-122.36, -122.30)),
+                               yaxis = list(range(c(47.58, 47.68))))
+  
+ 
+```
+
+
+Animation per month
+
+```{r, fig.show="animate"}
+
+p <- ggplot() +
+      geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+      geom_point(data = Call911.short2[year==2016], aes(x=Longitude, y=Latitude, color = Type, frame = month)) +
+      ggthemes::theme_map() +
+              theme(plot.background = element_rect(fill = "black"),
+                    legend.background = element_rect(fill = "black"),
+                    legend.position = "right",
+                    legend.key = element_rect(fill = "black"),
+                    legend.text = element_text(color = "white", size=12),
+                    title = element_text(color = "white", size =12))  +
+              coord_map() +
+              xlim(-122.5, -122.2) +
+              ylim(47.5, 47.7) 
+
+gganimate(p)
+```
+
+
+Just to check, you can fix scales in ggplot
+
+```{r}
+  for (i in (2010:2017)) {
+  
+    plot <- ggplot(Call911.short2[year==i]) +
+            stat_density_2d(aes(x=Longitude, y=Latitude, fill = ..level..,  alpha =..level..), 
+                            size = 1, bins = 16, geom = "polygon") +
+            scale_fill_gradientn(colours = c("green", "yellow","red"),
+                                 limits=c(0, 5000) ) +
+            geom_path(data=Seattle.points, aes(long, lat, group = group), colour = "#d3d3d3") +
+            ggthemes::theme_map() +
+            theme(plot.background = element_rect(fill = "black"),
+                  legend.background = element_rect(fill = "black"),
+                  legend.position = "right",
+                  legend.key = element_rect(fill = "black"),
+                  legend.text = element_text(color = "white"),
+                  title = element_text(color = "white")) +
+            coord_map() +
+            xlim(-122.36, -122.30) +
+            ylim(47.58, 47.68)  + 
+            ggtitle(paste("Year", i))
+    print(plot)
+  }
+```
+
+
+

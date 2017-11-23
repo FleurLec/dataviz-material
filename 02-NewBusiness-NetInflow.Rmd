@@ -1,0 +1,282 @@
+---
+title: "02-NewBusiness-NetInflow"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE) ## add a comment
+```
+
+
+```{r, message = FALSE}
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(scales)
+library(plotly)
+library(data.table)
+```
+
+
+## Cancellation and NB rate using geom_line : 
+
+1. Create Dataset
+```{r}
+
+## data
+  reportDF <- read.csv2(file = "./datasets/report2017.csv")
+  reportDF$date <- as.Date(reportDF$date)
+  reportDF$portfolio <- as.numeric(reportDF$portfolio)
+
+
+  DFagg <- as.data.table(
+          reportDF %>%
+           group_by(LOB, network, date) %>%
+           summarize(NB = sum(newBusiness),
+                     canc = sum(cancellation),
+                     portfolio = sum(portfolio)) %>%
+           mutate(NB.rate = NB/portfolio,
+                  canc.rate = canc/portfolio,
+                  netInflow = as.numeric(NB - canc)) %>%
+           select(-c(NB, canc))
+  )
+
+  DF.tidy <- DFagg %>% 
+             tidyr::gather(KPI, value, -date, -LOB, -network) %>% 
+             filter(network == "Agent") %>% 
+             as.data.table()
+
+```
+
+
+2. Call ggplot on the tidy dataframe
+```{r}
+## generic theme  :
+  myTheme <-  function(x) { theme(axis.text.x = element_text(angle = 90),                  
+                                  axis.title.x = element_blank(),
+                                  axis.title.y = element_blank(),
+                                  legend.position = "right")
+  }
+
+
+ a1 <-   ggplot(DF.tidy[KPI %in% c("NB.rate", "canc.rate")]) +                        # data
+         geom_line(aes(x=date, y=value, color = KPI)) +                               # geoms
+         facet_wrap(~LOB, dir = "h") +                                                # facet for LOB
+         scale_y_continuous(labels = scales::percent ) +                              # Scale Y
+         scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+         scale_colour_manual(name="KPI's", 
+                             values=c("NB.rate" = "green", "canc.rate" = "red"),
+                             label = c("NB.rate"="New Business", "canc.rate"="Cancellation")) +
+        myTheme() + ggtitle("Evolution of New Business/Cancellation rate per Line of Business")   # Theme
+ a1
+ 
+```
+ 
+ 
+### SOLUTION 2 : Less adviced : using dataframe as it is
+
+1. same data
+2. ggplot on the untidy dataframe
+```{r}
+ b1 <-  ggplot(DFagg[network == "Agent"]) +                                           # data
+        geom_line(aes(x=date, y=NB.rate, color = "NB")) +                             # geom NB
+        geom_line(aes(x=date, y=canc.rate, color = "Canc")) +                         # geom Cancellation
+        facet_wrap(~LOB, dir="h") +                                                   # facet for LOB
+        scale_y_continuous(labels = scales::percent ) +                               # Scale Y
+        scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +               # Scale X
+        scale_color_manual(name="KPI's", 
+                            values= c(NB = "#00FF00", Canc = "#FF0000"),
+                            label = c(NB = "New Business", Canc = "Cancellation")) +
+        myTheme() + ggtitle("Evolution of New Business/Cancellation rate per Line of Business")   # Theme
+b1    
+
+```
+
+
+### SOLUTION 3 : Solution 2 wrapped in a function 
+
+Note that to map ggplot in a function, some adjustments need to be done : 
+- aes => aes_string if the function variables appear in aes()
+- Quoted string need to be wrapped with shQuote()
+- as.formula for facet options
+
+```{r}
+
+   plot.NB.canc <- function(DF, x.date, y.nb, y.canc, grp) {
+        ggplot(DF) + 
+          geom_line(aes_string(x=x.date, y=y.nb, color = shQuote("NB"))) +
+          geom_line(aes_string(x=x.date, y=y.canc, color = shQuote("Canc"))) +
+          facet_wrap(as.formula(paste0("~",grp)), dir="h") +
+          scale_y_continuous(labels = scales::percent ) +
+          scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +
+          scale_color_manual(name="KPI's", 
+                              values= c(NB = "#00FF00", Canc = "#FF0000"),
+                              label = c(NB = "New Business", Canc = "Cancellation")) +
+          myTheme() + ggtitle("Evolution of New Business/Cancellation rate per Line of Business")   
+      }    
+   c1 <- plot.NB.canc(DFagg[network == "Agent"], "date", "NB.rate", "canc.rate", "LOB")
+   c1
+```
+
+
+## Adding NetInflow bar chart and combine all.
+
+=> Here follows the global solution (I choose the tidy method embedded in a function)
+
+
+```{r}
+## generic theme  :
+  myTheme <-  function(x) { theme(axis.text.x = element_text(angle = 90),                  
+                                  axis.title.x = element_blank(),
+                                  axis.title.y = element_blank(),
+                                  legend.position = "right")
+  }
+
+## tidy dataframe
+  DF.tidy <- DFagg %>% tidyr::gather(KPI, value, -date, -LOB, -network) %>% filter(network == "Agent") %>% as.data.table()
+
+
+## function 1 : line 
+ g1.f <- function(df, grp)  {ggplot(df) +                                                           # data
+                       geom_line(aes(x=date, y=value, color = KPI)) +                               # geoms
+                       facet_wrap(as.formula(paste0("~",grp)), dir="h") +                           # facet for LOB
+                       scale_y_continuous(labels = scales::percent ) +                              # Scale Y
+                       scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+                       scale_colour_manual(name="KPI",                                              # Scale Color
+                                           values=c("NB.rate" = "green", "canc.rate" = "red"),
+                                           label = c("NB.rate"="New Business", "canc.rate"="Cancellation")) +
+                      myTheme()                                                                     # Theme
+ }
+ ## function 2 : bar  
+ g2.f <- function(df, grp)  {ggplot(df) +                                                           # data
+                       geom_bar(aes(x=date, y=value, fill = KPI),                                   # geoms
+                                stat = "identity", position = "dodge") +                            # 
+                       facet_wrap(as.formula(paste0("~",grp)), dir="h") +                           # facet for LOB
+                       scale_y_continuous(labels = scales::comma ) +                                # Scale Y
+                       scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+                       scale_fill_manual(name = "KPI",
+                                         values=c("netInflow" = "khaki"),                           # Scale Fill
+                                         label = c("netInflow"="Net Inflow")) +
+                      myTheme()                                                                     # Theme
+ }
+ 
+ 
+ g1 <- g1.f(DF.tidy[KPI %in% c("NB.rate", "canc.rate")], "LOB")
+ g2 <- g2.f(DF.tidy[KPI == "netInflow"], "LOB") 
+
+ggpubr::ggarrange(g1, g2, align = "v", nrow = 2)
+
+
+```
+
+With ggplotly : 
+
+
+```{r}
+  subplot(ggplotly(g1, tooltip = c("date", "value")) , 
+          ggplotly(g2, tooltip = c("date", "value")) %>%
+                   layout(xaxis = list(side ="top", tickangle = -90), 
+                          xaxis2 = list(side ="top",tickangle = -90)), 
+          nrows =2, shareX = T, margin=.08)
+  
+  #plotly_json(p1)  # to understand how ggplotly object are built from ggplot
+
+```
+
+And With plotly
+
+
+Technically feasible but not very lisible : it is adviced to create several plots.
+
+
+```{r}
+# choose your colors per LOB for instance
+  cols <- data.table(v = levels(DFagg$LOB), colors = c("steelblue", "#dee5e4"))
+  
+  plotly.nbcc <- function(df, ntw, lob, legend) {
+    
+        # NB and Cancellation
+        p.nbcc <- plot_ly(df[network == ntw & LOB == lob]) %>%
+            add_lines(x = ~date, y = ~canc.rate*100, 
+                      name = '% Cancellation',  
+                      line = list(color = "red", dash = "dot"),
+                      showlegend = legend,
+                      hoverinfo = 'text', 
+                      text = ~paste('% Cancellation : ', round(canc.rate*100, 1), "% ", '<br> (', ntw, '-', lob, ')')) %>%
+            add_lines(x = ~date, y = ~NB.rate*100, 
+                      name = '% NewBusiness',  
+                      line = list(color = "green"),
+                      showlegend = legend,
+                      hoverinfo = 'text', 
+                      text = ~paste('% New Business : ', round(NB.rate*100, 1), "% ", '<br> (', ntw, '-', lob, ')')) %>%
+            layout(xaxis = list(title = ""),
+                   yaxis = list(ticksuffix = '%', 
+                                tickfont = list(size = 8)))
+  }
+  
+  plotly.ni <- function(df, ntw, lob, legend) {
+      # Net Inflow
+      p.ni <- plot_ly(df[network == ntw & LOB == lob],
+                x = ~date, y = ~netInflow, 
+                type = 'bar', 
+                name = "Net Inflow",
+                marker = list(color = cols[v==lob, colors] ) ,
+                showlegend = legend,
+                opacity = .6,
+                hoverinfo = 'text', 
+                text = ~paste('Net Inflow : ', comma(netInflow), '<br> (', ntw, '-', lob, ')')) %>%
+          layout(xaxis = list(tickangle = -90,
+                              side = "top",
+                              title = "",
+                              autotick = F, 
+                              dtick = "M2",
+                              tickfont = list(size = 8)),
+                 yaxis = list(tickfont = list(size = 8)))
+
+ }
+  
+  #eval(plotly.nbcc(DFagg, "Agent", "Motor", T))
+  #eval(plotly.ni(DFagg, "Agent", "Motor", T))
+  
+  
+```
+
+And see the results 
+
+```{r}
+
+
+ ## paste plots together
+ plotly.KPI <- function(df, ntw, lob, legend) {
+ 
+    subplot(plotly.nbcc(df, ntw, lob, legend), 
+            plotly.ni(df, ntw, lob, legend), 
+            nrows = 2, shareX = TRUE, margin = .08) %>%
+    layout( title = paste("Net Inflow, New Business & Cancellation rates  : <b>", ntw, "-", lob, "</b>"),
+            margin = list(b=70),
+            legend = list( x = 1.05,                        # avoid overlap of legend and y-axis
+                           y = 0.5, yanchor = "center") )   # valign
+  
+ }
+
+ plotly.KPI(DFagg, "Agent", "Motor", T)
+ 
+```
+
+
+Use subplot to gather charts :
+
+```{r}
+
+   subplot(plotly.nbcc(DFagg, "Agent", "Motor", T), 
+           plotly.nbcc(DFagg, "Direct", "Motor", F),
+           plotly.ni(DFagg, "Agent", "Motor", T), 
+           plotly.ni(DFagg, "Direct", "Motor", F), 
+            nrows = 2, shareX = TRUE,shareY = T, margin = .08) %>%
+    layout( title = paste("Net Inflow, New Business & Cancellation rates  : <b> Agent vs Direct - Motor</b>"),margin = list(t = 40),
+            legend = list(x = 1.05,                        # avoid overlap of legend and y-axis
+                           y = 0.5, yanchor = "center") )   # valign
+  
+```

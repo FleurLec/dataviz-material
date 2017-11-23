@@ -1,0 +1,128 @@
+---
+title: "01-basic-ggplot-plotly"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This markdown show how to confugure ggplot, ggplotly and plotly for a basic chart as bar chart.
+
+
+```{r, message = FALSE}
+library(ggplot2)
+library(plotly)
+library(dplyr)
+```
+
+
+GOAL : Create a toy dataset
+
+```{r}
+## data
+  set.seed(999)
+  DF002 <- data.frame( type = sample(c("blue", "red"), replace =T, size = 200),
+                       x = sample((1:50), replace =T, size = 200))
+  DF002$y <- log(DF002$x) + rnorm(1)
+
+```
+
+
+GOAL : Show how to deal with geom_ object : 
+  default geom_bar : 
+  - aes : 1 x-axis 
+  - stat : count => count the # of observation per x
+  - position : stack
+  
+```{r}
+## plot - implicit default
+   ggplot(DF002) + 
+   geom_bar(aes(x = x, fill = type), stat = "count", position = "stack")
+
+## same
+   ggplot(DF002) + 
+   geom_bar(aes(x = x, fill = type))
+```
+
+
+GOAL : Show how to deal with geom_object : changing aesthetic, stat and position
+  user-defined geom_bar : 
+  - aes : 2 axis 
+  - stat : identity => plot the values inside y
+  - position : dodge
+
+```{r}   
+## plot - change stat and position : 
+  ggplot(DF002) + 
+  geom_bar(aes(x = x, y = y, fill = type), stat = "identity", position = "dodge")
+```
+
+
+GOAL : Show how to deal with geom : add several geom_layer : ONLY IF HOMOGENEOUS Y-AXIS !
+
+```{r}   
+## plot - change stat and position : 
+  ggplot(DF002) + 
+  geom_bar(aes(x = x, y = y, fill = type), stat = "identity", position = "dodge") + 
+  geom_line(aes(x = x, y = y), color = "black", size = 1, linetype = "dotted")
+
+```
+
+
+GOAL : create a numerical fake dataset for demo
+
+```{r}
+DF003 <- data.frame(color = sample((1:2), size = 20, replace = T),
+                   price = sample((1:2), size = 20, replace = T))
+```
+
+
+
+
+GOAL : understand stat with ggplot, included internar computed variables for each stat : 
+stat_count creates 2 internal variables : ..count.. and ..prop.. : 
+  
+The 2 following charts are exactly the same : only label countaining computed stat changes
+- Nota : aesthetic shared by all layer can be factorized in ggplot(...)
+- note by the way the use of facet_grid(facets = ~[var]) to plot chart side by side
+
+```{r}
+## Using ..count..
+  ggplot(DF003, aes(x = color, fill=factor(price))) +     
+    geom_bar() +    
+    geom_text(aes(label = ..count..),   #use  prop.table(..count..) to get global %
+              stat= "count",
+	            position = position_stack(vjust=0.5)) + 
+  facet_grid(~factor(price))
+
+##using ..prop.. (BEWARE : ..prop.. calculate proportion per group !)
+  ggplot(DF003, aes(x = color, fill=factor(price))) +     
+    geom_bar() +    
+    geom_text(aes(label = scales::percent(..prop..)),   # library(scales) provide nice formats
+              stat= "count",
+	            position = position_stack(vjust=0.5)) + 
+  facet_grid(~factor(price))
+
+```
+
+With plotly
+
+
+```{r}
+ DF002 %>%
+    group_by(x, type) %>%
+    summarise(nb = n()) %>%
+  plot_ly() %>% 
+    add_trace(x = ~x, y = ~nb, color = ~type, type = "bar", 
+            colors = c("red" = "lightcoral", "blue" = "steelblue"),
+            hoverinfo = 'text', 
+            text = ~paste('Type : ', type,'<br> x : ', x, '// y :', nb)) %>%
+    layout(barmode = 'stack')
+
+```
+
+
+

@@ -1,0 +1,115 @@
+---
+title: "Data Visualization with R - Exercice 2"
+author: "AGPC - Flec"
+date: "Novembre 2017"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(data.table)
+library(scales)
+library(plotly)
+```
+
+
+```{r, echo=FALSE}
+
+## data
+  reportDF <- read.csv2(file = "./datasets/report2017.csv")
+  reportDF$date <- as.Date(reportDF$date)
+  reportDF$portfolio <- as.numeric(reportDF$portfolio)
+
+
+  DFagg <- as.data.table(
+          reportDF %>%
+           group_by(LOB, network, date) %>%
+           summarize(NB = sum(newBusiness),
+                     canc = sum(cancellation),
+                     portfolio = sum(portfolio)) %>%
+           mutate(NB.rate = NB/portfolio,
+                  canc.rate = canc/portfolio,
+                  netInflow = as.numeric(NB - canc)) %>%
+           select(-c(NB, canc))
+  )
+ 
+```
+
+
+```{r, echo=FALSE}
+## generic theme  :
+  myTheme <-  function(x) { theme(axis.text.x = element_text(angle = 90),                  
+                                  axis.title.x = element_blank(),
+                                  axis.title.y = element_blank(),
+                                  legend.position = "right")
+  }
+
+## tidy dataframe
+  DF.tidy <- DFagg %>% tidyr::gather(KPI, value, -date, -LOB, -network) %>% filter(network == "Agent") %>% as.data.table()
+
+
+## function 1 : line 
+ g1.f <- function(df, grp)  {ggplot(df) +                                                           # data
+                       geom_line(aes(x=date, y=value, color = KPI)) +                               # geoms
+                       facet_wrap(as.formula(paste0("~",grp)), dir="h") +                           # facet for LOB
+                       scale_y_continuous(labels = scales::percent ) +                              # Scale Y
+                       scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+                       scale_colour_manual(name="KPI",                                              # Scale Color
+                                           values=c("NB.rate" = "green", "canc.rate" = "red"),
+                                           label = c("NB.rate"="New Business", "canc.rate"="Cancellation")) +
+                      myTheme()                                                                     # Theme
+ }
+ ## function 2 : bar  
+ g2.f <- function(df, grp)  {ggplot(df) +                                                           # data
+                       geom_bar(aes(x=date, y=value, fill = KPI),                                   # geoms
+                                stat = "identity", position = "dodge") +                            # 
+                       facet_wrap(as.formula(paste0("~",grp)), dir="h") +                           # facet for LOB
+                       scale_y_continuous(labels = scales::comma ) +                                # Scale Y
+                       scale_x_date(date_labels = "%b %y", date_breaks = "3 months") +              # Scale X
+                       scale_fill_manual(name = "KPI",
+                                         values=c("netInflow" = "khaki"),                           # Scale Fill
+                                         label = c("netInflow"="Net Inflow")) +
+                      myTheme()                                                                     # Theme
+ }
+ 
+ 
+ g1 <- g1.f(DF.tidy[KPI %in% c("NB.rate", "canc.rate")], "LOB")
+ g2 <- g2.f(DF.tidy[KPI == "netInflow"], "LOB") 
+
+
+```
+
+
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX 
+### EXERCICE 2 
+### EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX EX 
+
+Go Back to your NewBusiness/Cancellation/NetInflow charts and make them dynamic using ggplotly: 
+
+(to define current and possible adjustment, see both ```plotly_json``` and https://plot.ly/r/reference/#layout )
+
+```{r}
+  subplot(ggplotly(g1, tooltip = c("date", "value")) , 
+          ggplotly(g2, tooltip = c("date", "value")) %>%
+                   layout(xaxis = list(side ="top", tickangle = -90), 
+                          xaxis2 = list(side ="top",tickangle = -90)), 
+          nrows =2, shareX = T, margin=.08)
+  
+  #plotly_json(p1)  # to understand how ggplotly object are built from ggplot
+
+```
+
+
+

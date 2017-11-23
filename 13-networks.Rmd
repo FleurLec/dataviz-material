@@ -1,0 +1,54 @@
+---
+title: "13-networks"
+author: "Fleur.Lecarpentier"
+date: "11 novembre 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(networkD3)
+library(dplyr)
+```
+
+## NEW: networks
+
+
+```{r}
+  load(file = "./datasets/Sankey.RData", verbose = T)
+  
+  tmp1 <- sankey.df %>% 
+          group_by(label.source, levels) %>% 
+          filter(row_number() == 1) %>% 
+          select(label.source, levels)
+  
+  tmp2 <- anti_join(sankey.df, tmp1, by=c("label.target"="label.source")) %>% 
+          select(label.target) %>% 
+          mutate(levels = as.integer(4)) %>% 
+          rename(label.source = label.target) %>% 
+          group_by(label.source, levels) %>% 
+          filter(row_number() == 1)
+
+  nodes <- rbind(tmp1 ,tmp2) %>% as.data.frame()
+  nodes$value.node <- rpois(nrow(nodes), 5)
+
+
+## network
+
+  forceNetwork(Links = sankey.df, Nodes = nodes,
+                    Source = 'source', Target = 'target', 
+                    NodeID = 'label.source',
+                    Nodesize = 'value.node', #sizing nodes by centrality
+                    Group = 'levels', # color nodes by source 
+                    charge = -50, # node repulsion
+                    linkDistance = 2,
+                    zoom = T, 
+                    opacity = 1,
+                    legend=T,
+                    fontSize=12)
+  
+  
+```
